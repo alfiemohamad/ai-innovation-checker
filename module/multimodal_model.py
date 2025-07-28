@@ -6,6 +6,7 @@ import base64
 import logging
 from typing import Optional, Dict
 import json
+import re
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +63,36 @@ class GeminiPDFExtractor:
             logger.error(f"Failed to load PDF {pdf_path}: {e}")
             raise
     
+    def clean_json_response(self, response_text: str) -> str:
+        """Clean and extract JSON from response text"""
+        if not response_text:
+            return ""
+        
+        # Remove leading/trailing whitespace
+        text = response_text.strip()
+        
+        # Try to extract JSON from markdown code block first
+        json_match = re.search(r'```json\s*\n(.*?)\n```', text, re.DOTALL)
+        if json_match:
+            return json_match.group(1).strip()
+        
+        # Try to extract JSON from generic code block
+        code_match = re.search(r'```\s*\n(.*?)\n```', text, re.DOTALL)
+        if code_match:
+            potential_json = code_match.group(1).strip()
+            # Check if it looks like JSON
+            if potential_json.startswith('{') and potential_json.endswith('}'):
+                return potential_json
+        
+        # Try to find JSON object in raw text
+        json_start = text.find('{')
+        json_end = text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            return text[json_start:json_end]
+        
+        # Return original text if no JSON pattern found
+        return text
+    
     def extract_multiple_sections(self, pdf_path: str, sections: list) -> Dict[str, str]:
         """Extract multiple sections from PDF"""
         try:
@@ -80,15 +111,16 @@ class GeminiPDFExtractor:
             2. Ekstrak seluruh konten dari section tersebut
             3. Jangan sertakan judul section dalam hasil
 
-            Format output dalam JSON:
+            Format output dalam JSON yang valid:
             {{
                 "latar_belakang": "konten latar belakang disini",
-                "tujuan_inovasi": "konten tujuan inovasi disini",
+                "tujuan_inovasi": "konten tujuan inovasi disini", 
                 "deskripsi_inovasi": "konten deskripsi inovasi disini"
             }}
 
             Jika section tidak ditemukan, isi dengan "TIDAK DITEMUKAN".
-            Pastikan output adalah valid JSON.
+            PENTING: Pastikan output adalah valid JSON tanpa karakter escape yang tidak perlu.
+            Jangan gunakan markdown code block, berikan hanya JSON murni.
             """
             
             # Generate content using Gemini
@@ -96,32 +128,32 @@ class GeminiPDFExtractor:
             
             if response and response.text:
                 try:
+                    # Clean the response text
+                    cleaned_json = self.clean_json_response(response.text)
+                    
                     # Try to parse as JSON
-                    result_text = response.text.strip()
+                    result = json.loads(cleaned_json)
                     
-                    # Remove code block markers if present
-                    if result_text.startswith('json'):
-                        result_text = result_text[7:]
-                    if result_text.startswith(''):
-                        result_text = result_text[3:]
-                    if result_text.endswith(''):
-                        result_text = result_text[:-3]
+                    # Validate that we have the expected sections
+                    for section in sections:
+                        if section not in result:
+                            result[section] = "TIDAK DITEMUKAN"
                     
-                    result = json.loads(result_text.strip())
                     logger.info("Multiple sections extracted successfully")
                     return result
                     
-                except json.JSONDecodeError:
-                    # If JSON parsing fails, return raw text
-                    logger.warning("Failed to parse JSON, returning raw text")
+                except json.JSONDecodeError as e:
+                    # If JSON parsing fails, return raw text for fallback processing
+                    logger.warning(f"Failed to parse JSON: {e}")
+                    logger.warning(f"Raw response: {response.text[:500]}...")
                     return {"raw_response": response.text}
             else:
                 logger.warning("No response from Gemini")
-                return {}
+                return {section: "TIDAK DITEMUKAN" for section in sections}
                 
         except Exception as e:
             logger.error(f"Failed to extract multiple sections: {e}")
-            return {}
+            return {section: "TIDAK DITEMUKAN" for section in sections}
     
     def extract_with_custom_prompt(self, pdf_path: str, custom_prompt: str) -> Optional[str]:
         """Extract content using custom prompt"""

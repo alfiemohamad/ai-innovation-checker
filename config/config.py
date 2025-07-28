@@ -1,5 +1,8 @@
 import os
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
 
 class SaGoogle:
     def __init__(self):

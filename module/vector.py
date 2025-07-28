@@ -110,7 +110,7 @@ class PostgreDB:
     async def clean_text(self, text: str) -> str:
         import re
         return re.sub(r"[^a-zA-Z0-9\s.,<>=]", "", text)
-
+    
     async def build_table(
         self,
         df: pd.DataFrame,
@@ -130,8 +130,11 @@ class PostgreDB:
         df["bucket_name"] = self.bucket_name
         df["link_document"] = ""
         sections = ["latar_belakang", "tujuan_inovasi", "deskripsi_inovasi"]
+        
+        # Initialize sections in DataFrame if they don't exist
         for sec in sections:
-            df[sec] = ""
+            if sec not in df.columns:
+                df[sec] = ""
 
         for idx, row in df.iterrows():
             pdf_path = row.get("pdf_path")
@@ -141,10 +144,17 @@ class PostgreDB:
                 self.minio_client.fput_object(self.bucket_name, obj_name, pdf_path)
                 df.at[idx, "link_document"] = f"{self.base_url}/{self.bucket_name}/{obj_name}"
 
-                # extract sections
+                # Extract sections using the improved extractor
                 extracted = self.extractor.extract_multiple_sections(pdf_path, sections)
+                
+                # Handle fallback parsing if needed
+                if 'raw_response' in extracted:
+                    self._parse_raw_response(extracted, sections, pdf_path)
+                
+                # Assign extracted sections to dataframe
                 for sec in sections:
                     df.at[idx, sec] = extracted.get(sec, "TIDAK DITEMUKAN")
+                    print(f"Section {sec}: {extracted.get(sec, 'TIDAK DITEMUKAN')[:100]}...")
 
                 # delete local file
                 try:
@@ -155,7 +165,7 @@ class PostgreDB:
         # Default create_query with new columns
         if not create_query:
             create_query = f"""
-            CREATE TABLE {table_name} (
+            CREATE TABLE IF NOT {table_name} (
                 id VARCHAR(1024) PRIMARY KEY,
                 nama_inovasi TEXT,
                 bucket_name TEXT,
@@ -174,8 +184,13 @@ class PostgreDB:
             )
             """
 
+        # *** IMPORTANT FIX: Drop pdf_path column before saving to database ***
+        # pdf_path was only needed for processing, not for database storage
+        df_for_db = df.drop(columns=['pdf_path'], errors='ignore')
+        
         # Save main table and build vectors
-        await self.generateSourceTable(df, table_name, create_query)
+        await self.generateSourceTable(df_for_db, table_name, create_query)
+        
         vertex_embeddings = VertexAIEmbeddings(
             model_name="textembedding-gecko@003",
             location=self.vertex_location,
@@ -183,14 +198,18 @@ class PostgreDB:
         )
         text_splitter = SemanticChunker(vertex_embeddings)
         chunks = []
-        for _, row in df.iterrows():
+        for _, row in df.iterrows():  # Use original df for processing (still has all columns)
             for sec in sections:
                 content = await self.clean_text(row.get(sec, "").lower())
-                if content:
+                if content and content != "tidak ditemukan":  # Skip empty or not found content
                     for doc in text_splitter.create_documents([content]):
                         text = doc.page_content.strip()
                         if text:
                             chunks.append({"id": row["id"], "content": text})
+
+        if not chunks:
+            print("Warning: No content chunks were created for embedding")
+            return "success but no content for embedding"
 
         for i in range(0, len(chunks), 5):
             batch = [c["content"] for c in chunks[i : i + 5]]
@@ -203,6 +222,43 @@ class PostgreDB:
         await self.generateHNSWIndexing(table_name, m, operator, ef_construction, lists)
 
         return "success embedding data"
+
+    def _parse_raw_response(self, extracted: dict, sections: list, pdf_path: str):
+        """Helper method to parse raw_response when JSON parsing fails in extractor"""
+        import re
+        import json
+        
+        raw_response = extracted.get('raw_response', '')
+        
+        # Extract JSON from markdown code block if present
+        json_match = re.search(r'```json\s*\n(.*?)\n```', raw_response, re.DOTALL)
+        if json_match:
+            try:
+                json_data = json.loads(json_match.group(1))
+                # Update extracted with the parsed data
+                for sec in sections:
+                    if sec in json_data:
+                        extracted[sec] = json_data[sec]
+                print(f"Successfully parsed JSON from raw_response for {pdf_path}")
+                return
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse JSON from raw_response: {e}")
+        
+        # Try to find JSON without code block
+        try:
+            # Look for JSON object in the raw response
+            json_start = raw_response.find('{')
+            json_end = raw_response.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = raw_response[json_start:json_end]
+                json_data = json.loads(json_str)
+                for sec in sections:
+                    if sec in json_data:
+                        extracted[sec] = json_data[sec]
+                print(f"Successfully parsed JSON from raw text for {pdf_path}")
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON from raw text: {e}")
+
 
     async def similarity_search_plagiarisme(
         self,
