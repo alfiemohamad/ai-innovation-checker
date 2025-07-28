@@ -8,6 +8,10 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from starlette.responses import JSONResponse
 from module.vector import PostgreDB
 import logging
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +72,26 @@ def parse_extraction_result(extracted_data, sections):
     
     return result
 
+def lsa_similarity(query_text, documents):
+    # Jika tidak ada dokumen pembanding, kembalikan array kosong
+    if not documents:
+        return np.array([])
+    # Gabungkan query dan dokumen pembanding ke dalam satu list
+    all_texts = [query_text] + documents
+    # Ubah teks menjadi matriks TF-IDF
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(all_texts)
+    # Jika fitur terlalu sedikit, kembalikan matriks identitas
+    if tfidf_matrix.shape[1] < 2:
+        return np.eye(len(all_texts))
+    # Tentukan jumlah topik untuk LSA (maksimal 10 atau jumlah dokumen)
+    n_topics = min(10, len(all_texts))
+    # Reduksi dimensi dengan LSA (TruncatedSVD)
+    lsa = TruncatedSVD(n_components=n_topics)
+    lsa_matrix = lsa.fit_transform(tfidf_matrix)
+    # Hitung cosine similarity antar dokumen
+    return cosine_similarity(lsa_matrix, lsa_matrix)
+
 @app.post("/innovations/")
 async def upload_innovation(
     judul_inovasi: str = Form(...),
@@ -75,11 +99,16 @@ async def upload_innovation(
     table_name: str = Form("innovations")
 ):
     """
-    Endpoint to upload an innovation PDF and its title.
-    - Saves the uploaded PDF to disk
-    - Extracts key sections using GeminiPDFExtractor
-    - Stores metadata in Postgres and MinIO
-    - Indexes embeddings for similarity search
+    Endpoint untuk upload PDF inovasi dan judulnya.
+    Alur:
+    1. Simpan file PDF ke disk lokal.
+    2. Ekstrak section penting dari PDF (latar belakang, tujuan inovasi, deskripsi inovasi).
+    3. Buat DataFrame dari hasil ekstraksi.
+    4. Simpan data ke database dan upload file ke MinIO, serta generate vector embeddings.
+    5. Setelah data tersimpan, lakukan vector search untuk mencari dokumen mirip.
+    6. Gabungkan kolom penting dari hasil vector search.
+    7. Hitung similarity LSA antara dokumen baru dan hasil vector search.
+    8. Kembalikan hasil berupa skor similarity LSA dan link dokumen MinIO.
     """
     # 1. Save the uploaded PDF
     ext = Path(file.filename).suffix
@@ -127,11 +156,44 @@ async def upload_innovation(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"build_table failed for '{table_name}': {e}")
 
+    # 5. Setelah build_table, lakukan similarity search
+    try:
+        # Gabungkan kolom untuk query
+        query_text = f"{df['latar_belakang'].iloc[0]} {df['tujuan_inovasi'].iloc[0]} {df['deskripsi_inovasi'].iloc[0]}"
+        uploaded_id = df['nama_inovasi'].iloc[0] if 'nama_inovasi' in df.columns else None
+        # Vector search
+        results = await db.similarity_search_plagiarisme(
+            query_text, 0.7, 10, table_name
+        )
+        print("result---",results)
+        if isinstance(results, dict) and "message" in results:
+            lsa_results = []
+        else:
+            # Filter out the uploaded document itself from results (by id or unique field)
+            filtered_results = [r for r in results if r.get('id') != df['id'].iloc[0]]
+            # Gabungkan kolom untuk setiap dokumen hasil vector search
+            doc_texts = [
+                f"{r['latar_belakang']} {r['tujuan_inovasi']} {r['deskripsi_inovasi']}"
+                for r in filtered_results
+            ]
+            lsa_sim_matrix = lsa_similarity(query_text, doc_texts)
+            lsa_results = []
+            for i, r in enumerate(filtered_results):
+                lsa_score = float(lsa_sim_matrix[0, i+1]) if lsa_sim_matrix.shape[0] > 1 else 0.0
+                lsa_results.append({
+                    "lsa_similarity": round(lsa_score, 4),
+                    "link_document": r["link_document"]
+                })
+    except Exception as e:
+        logger.error(f"Similarity check failed: {e}")
+        lsa_results = []
+
     return JSONResponse({
         "status": status, 
         "table": table_name,
         "extracted_sections": {
             sec: "✓" if extracted.get(sec) and extracted[sec] != "TIDAK DITEMUKAN" else "✗"
             for sec in sections
-        }
+        },
+        "lsa_similarity_results": lsa_results
     })
