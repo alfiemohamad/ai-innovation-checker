@@ -66,26 +66,36 @@ class PostgreDB:
 
     async def generateSourceTable(self, df: pd.DataFrame, table_name: str, create_query: str):
         conn = await self.connect_to_db()
-        await conn.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+        # Only create table if not exists
         await conn.execute(create_query)
         tuples = [tuple(map(str, t)) for t in df.itertuples(index=False)]
-        await conn.copy_records_to_table(
-            table_name,
-            records=tuples,
-            columns=list(df),
-            timeout=10
-        )
+        # Insert or update (upsert) data
+        for t in tuples:
+            columns = list(df)
+            values = ','.join([f'${i+1}' for i in range(len(columns))])
+            updates = ','.join([f"{col}=EXCLUDED.{col}" for col in columns if col != 'id'])
+            await conn.execute(
+                f"""
+                INSERT INTO {table_name} ({','.join(columns)}) VALUES ({values})
+                ON CONFLICT (id) DO UPDATE SET {updates}
+                """,
+                *t
+            )
         await conn.close()
 
     async def generateVectorTable(self, df: pd.DataFrame, table_name: str, create_query: str):
         conn = await self.connect_to_db()
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         await register_vector(conn)
-        await conn.execute(f"DROP TABLE IF EXISTS {table_name}_embeddings")
         await conn.execute(create_query)
         for _, row in df.iterrows():
+            # Upsert embedding
             await conn.execute(
-                f"INSERT INTO {table_name}_embeddings (id, content, embedding) VALUES ($1, $2, $3)",
+                f"""
+                INSERT INTO {table_name}_embeddings (id, content, embedding)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (id, content) DO UPDATE SET embedding=EXCLUDED.embedding
+                """,
                 row["id"], row["content"], np.array(row["embedding"])
             )
         await conn.close()
@@ -165,7 +175,7 @@ class PostgreDB:
         # Default create_query with new columns
         if not create_query:
             create_query = f"""
-            CREATE TABLE IF NOT {table_name} (
+            CREATE TABLE IF NOT EXISTS {table_name} (
                 id VARCHAR(1024) PRIMARY KEY,
                 nama_inovasi TEXT,
                 bucket_name TEXT,
@@ -177,10 +187,11 @@ class PostgreDB:
             """
         if not vector_query:
             vector_query = f"""
-            CREATE TABLE {table_name}_embeddings (
+            CREATE TABLE IF NOT EXISTS {table_name}_embeddings (
                 id VARCHAR(1024) NOT NULL REFERENCES {table_name}(id),
                 content TEXT,
-                embedding vector(768)
+                embedding vector(768),
+                PRIMARY KEY (id, content)
             )
             """
 
@@ -312,3 +323,7 @@ class PostgreDB:
                 "similarity": r["similarity"]
             } for r in results
         ]
+
+
+
+
