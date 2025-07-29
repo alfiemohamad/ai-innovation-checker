@@ -1,16 +1,19 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
 import App from './index';
 
 // Mock fetch globally
 beforeAll(() => {
-  global.fetch = jest.fn(() =>
+  global.fetch = vi.fn(() =>
     Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({ innovation_ids: ["dummyid"], summary: "Ringkasan", answer: "Jawaban AI" })
-    })
-  ) as jest.Mock;
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => null },
+      json: () => Promise.resolve({ innovation_ids: ["dummyid"], summary: "Ringkasan", answer: "Jawaban AI" }),
+      text: () => Promise.resolve(''),
+    } as unknown as Response)
+  );
 });
 
 describe('AI Innovation Checker Frontend', () => {
