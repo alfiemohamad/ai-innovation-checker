@@ -117,7 +117,8 @@ class PostgreDB:
 
     async def dropVectorTable(self, table_name: str):
         conn = await self.connect_to_db()
-        await conn.execute(f"DROP TABLE IF EXISTS {table_name}_embeddings")
+        await conn.execute(f"DROP TABLE IF EXISTS {table_name}_chat_history CASCADE")
+        await conn.execute(f"DROP TABLE IF EXISTS {table_name}_embeddings CASCADE")
         await conn.execute(f"DROP TABLE IF EXISTS {table_name}_lsa_results CASCADE")
         await conn.execute(f"DROP TABLE IF EXISTS {table_name}_scoring CASCADE")
         await conn.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
@@ -251,9 +252,10 @@ class PostgreDB:
             )
             """
 
-        # Create LSA results table and scoring table
+        # Create LSA results table, scoring table, and chat history table
         await self.create_lsa_results_table(table_name)
         await self.create_scoring_table(table_name)
+        await self.create_chat_history_table(table_name)
 
         # *** IMPORTANT FIX: Drop pdf_path column before saving to database ***
         # pdf_path was only needed for processing, not for database storage
@@ -405,6 +407,191 @@ class PostgreDB:
         except Exception as e:
             print(f"Failed to save scoring results: {e}")
 
+    async def create_chat_history_table(self, table_name: str):
+        """Create table to store chat history"""
+        conn = await self.connect_to_db()
+        await conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table_name}_chat_history (
+                id SERIAL PRIMARY KEY,
+                chat_id VARCHAR(1024) UNIQUE NOT NULL,
+                innovation_id VARCHAR(1024) NOT NULL REFERENCES {table_name}(id),
+                user_name VARCHAR(255),
+                user_question TEXT NOT NULL,
+                ai_response TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create index for faster queries
+        await conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_chat_innovation_id 
+            ON {table_name}_chat_history(innovation_id)
+        """)
+        
+        await conn.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_chat_user_name 
+            ON {table_name}_chat_history(user_name)
+        """)
+        
+        await conn.close()
+
+    async def save_chat_history(
+        self, 
+        chat_id: str, 
+        innovation_id: str, 
+        user_question: str, 
+        ai_response: str,
+        user_name: str,
+        table_name: str = "innovations"
+    ):
+        """Save chat conversation to database"""
+        try:
+            # Ensure chat history table exists
+            await self.create_chat_history_table(table_name)
+            
+            conn = await self.connect_to_db()
+            
+            await conn.execute(f"""
+                INSERT INTO {table_name}_chat_history 
+                (chat_id, innovation_id, user_name, user_question, ai_response)
+                VALUES ($1, $2, $3, $4, $5)
+            """, chat_id, innovation_id, user_name, user_question, ai_response)
+            
+            await conn.close()
+            print(f"Saved chat history for innovation {innovation_id}")
+            
+        except Exception as e:
+            print(f"Failed to save chat history: {e}")
+
+    async def get_chat_history(
+        self, 
+        innovation_id: str, 
+        limit: int = 50, 
+        table_name: str = "innovations"
+    ):
+        """Get chat history for specific innovation"""
+        try:
+            conn = await self.connect_to_db()
+            
+            results = await conn.fetch(f"""
+                SELECT chat_id, user_question, ai_response, created_at, user_name
+                FROM {table_name}_chat_history 
+                WHERE innovation_id = $1 
+                ORDER BY created_at DESC 
+                LIMIT $2
+            """, innovation_id, limit)
+            
+            await conn.close()
+            
+            return [
+                {
+                    "chat_id": r["chat_id"],
+                    "question": r["user_question"],
+                    "answer": r["ai_response"],
+                    "timestamp": r["created_at"].isoformat() if r["created_at"] else None,
+                    "user_name": r["user_name"]
+                } for r in results
+            ]
+            
+        except Exception as e:
+            print(f"Failed to get chat history: {e}")
+            return []
+
+    async def get_user_chat_summary(self, user_name: str, table_name: str = "innovations"):
+        """Get summary of all chats for a specific user"""
+        try:
+            conn = await self.connect_to_db()
+            
+            results = await conn.fetch(f"""
+                SELECT 
+                    ch.innovation_id,
+                    i.nama_inovasi,
+                    COUNT(ch.id) as total_messages,
+                    MAX(ch.created_at) as last_chat,
+                    MIN(ch.created_at) as first_chat
+                FROM {table_name}_chat_history ch
+                JOIN {table_name} i ON ch.innovation_id = i.id
+                WHERE ch.user_name = $1
+                GROUP BY ch.innovation_id, i.nama_inovasi
+                ORDER BY last_chat DESC
+            """, user_name)
+            
+            await conn.close()
+            
+            return [
+                {
+                    "innovation_id": r["innovation_id"],
+                    "innovation_name": r["nama_inovasi"],
+                    "total_messages": r["total_messages"],
+                    "last_chat": r["last_chat"].isoformat() if r["last_chat"] else None,
+                    "first_chat": r["first_chat"].isoformat() if r["first_chat"] else None
+                } for r in results
+            ]
+            
+        except Exception as e:
+            print(f"Failed to get user chat summary: {e}")
+            return []
+
+    async def search_chat_history(
+        self, 
+        search_query: str, 
+        user_name: str = None, 
+        innovation_id: str = None,
+        table_name: str = "innovations"
+    ):
+        """Search through chat history"""
+        try:
+            conn = await self.connect_to_db()
+            
+            base_query = f"""
+                SELECT 
+                    ch.chat_id,
+                    ch.innovation_id,
+                    i.nama_inovasi,
+                    ch.user_question,
+                    ch.ai_response,
+                    ch.created_at,
+                    ch.user_name
+                FROM {table_name}_chat_history ch
+                JOIN {table_name} i ON ch.innovation_id = i.id
+                WHERE (ch.user_question ILIKE $1 OR ch.ai_response ILIKE $1)
+            """
+            
+            params = [f"%{search_query}%"]
+            param_count = 1
+            
+            if user_name:
+                param_count += 1
+                base_query += f" AND ch.user_name = ${param_count}"
+                params.append(user_name)
+            
+            if innovation_id:
+                param_count += 1
+                base_query += f" AND ch.innovation_id = ${param_count}"
+                params.append(innovation_id)
+            
+            base_query += " ORDER BY ch.created_at DESC LIMIT 100"
+            
+            results = await conn.fetch(base_query, *params)
+            await conn.close()
+            
+            return [
+                {
+                    "chat_id": r["chat_id"],
+                    "innovation_id": r["innovation_id"],
+                    "innovation_name": r["nama_inovasi"],
+                    "question": r["user_question"],
+                    "answer": r["ai_response"],
+                    "timestamp": r["created_at"].isoformat() if r["created_at"] else None,
+                    "user_name": r["user_name"]
+                } for r in results
+            ]
+            
+        except Exception as e:
+            print(f"Failed to search chat history: {e}")
+            return []
+
     async def get_lsa_results(self, innovation_id: str, table_name: str = "innovations"):
         """Get LSA similarity results for an innovation"""
         try:
@@ -487,3 +674,22 @@ class PostgreDB:
                 "similarity": r["similarity"]
             } for r in results
         ]
+    
+    async def get_innovation_ids_by_inovator(self, inovator_name: str, table_name: str = "innovations"):
+        """Get innovation IDs for a specific inovator (case insensitive with space handling)"""
+        try:
+            # Clean the inovator name (replace spaces with underscores and lowercase)
+            cleaned_inovator = inovator_name.lower().replace(" ", "_")
+            
+            conn = await self.connect_to_db()
+            results = await conn.fetch(
+                f"SELECT id FROM {table_name} WHERE nama_inovator LIKE $1",
+                f"%{cleaned_inovator}%"
+            )
+            await conn.close()
+            
+            return [r["id"] for r in results]
+            
+        except Exception as e:
+            print(f"Failed to get innovation IDs: {e}")
+            return []

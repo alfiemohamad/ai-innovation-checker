@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Header
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Header, Request
 from starlette.responses import JSONResponse
 from module.vector import PostgreDB
 import logging
@@ -14,6 +14,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from dotenv import load_dotenv
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load env variables
 load_dotenv()
@@ -43,6 +44,23 @@ db = PostgreDB()
 # Ensure the upload directory exists
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Ganti dengan ["http://localhost:5173"] jika ingin lebih aman
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logging.info(f"Incoming request: {request.method} {request.url.path}")
+    response = await call_next(request)
+    if response.status_code == 405:
+        logging.warning(f"405 Method Not Allowed: {request.method} {request.url.path}")
+    return response
 
 def parse_extraction_result(extracted_data, sections):
     """
@@ -231,7 +249,7 @@ async def upload_innovation(
     # 4. Invoke build_table to persist and index
     try:
         status = await db.build_table(df, table_name)
-        # logger.info(f'Build table status: {status}')
+        logger.info(f'Build table status: {status}')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"build_table failed for '{table_name}': {e}")
 
@@ -474,3 +492,381 @@ async def get_innovation_summary(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate summary: {e}")
+
+@app.post("/innovations/{innovation_id}/chat")
+async def chat_about_innovation(
+    innovation_id: str,
+    question: str = Form(...),
+    table_name: str = Form("innovations"),
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk tanya jawab terkait data inovasi yang sudah disubmit.
+    Menyimpan riwayat percakapan dan memberikan jawaban berdasarkan dokumen PDF.
+    """
+    try:
+        # Validate innovation exists and get data
+        conn = await db.connect_to_db()
+        row = await conn.fetchrow(
+            f"""SELECT nama_inovasi, nama_inovator, latar_belakang, 
+                      tujuan_inovasi, deskripsi_inovasi, link_document, bucket_name
+               FROM {table_name} WHERE id = $1""", 
+            innovation_id
+        )
+        
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Innovation not found")
+        
+        innovation_data = dict(row)
+        
+        # Check if user has access to this innovation (optional security check)
+        if innovation_data['nama_inovator'] != x_inovator.lower().replace(" ", "_"):
+            await conn.close()
+            raise HTTPException(status_code=403, detail="Access denied to this innovation")
+        
+        await conn.close()
+        
+        # Get the PDF from MinIO for context
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(innovation_data["link_document"])
+            object_path = parsed.path.lstrip("/")
+            parts = object_path.split("/", 1)
+            if len(parts) != 2:
+                raise Exception("Invalid link_document format")
+            bucket_name, object_name = parts
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to parse document link: {e}")
+
+        # Download PDF temporarily for AI processing
+        local_path = UPLOAD_DIR / f"chat_{innovation_id}_{uuid.uuid4().hex[:8]}.pdf"
+        try:
+            db.minio_client.fget_object(bucket_name, object_name, str(local_path))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to download PDF: {e}")
+
+        # Prepare context-aware prompt
+        context_prompt = f"""
+        Anda adalah asisten AI yang membantu menjawab pertanyaan tentang dokumen inovasi.
+        
+        **Informasi Inovasi:**
+        - Nama Inovasi: {innovation_data['nama_inovasi']}
+        - Nama Inovator: {innovation_data['nama_inovator']}
+        
+        **Data Ekstrak Sebelumnya:**
+        - Latar Belakang: {innovation_data['latar_belakang'][:300]}...
+        - Tujuan: {innovation_data['tujuan_inovasi'][:200]}...
+        - Deskripsi: {innovation_data['deskripsi_inovasi'][:300]}...
+        
+        **Pertanyaan User:** {question}
+        
+        **Instruksi:**
+        1. Jawab pertanyaan berdasarkan dokumen PDF yang tersedia
+        2. Gunakan informasi dari dokumen sebagai referensi utama
+        3. Jika informasi tidak tersedia di dokumen, jelaskan dengan jelas
+        4. Berikan jawaban yang informatif dan akurat
+        5. Gunakan bahasa Indonesia yang baik dan benar
+        
+        Jawab pertanyaan dengan format yang jelas dan terstruktur.
+        """
+
+        # Get AI response using the PDF
+        try:
+            ai_response = db.extractor.extract_with_custom_prompt(str(local_path), context_prompt)
+            if not ai_response:
+                ai_response = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
+        except Exception as e:
+            logger.error(f"Failed to get AI response: {e}")
+            ai_response = "Terjadi kesalahan saat memproses pertanyaan Anda."
+
+        # Save chat history to database
+        chat_id = str(uuid.uuid4())
+        await db.save_chat_history(
+            chat_id=chat_id,
+            innovation_id=innovation_id,
+            user_question=question,
+            ai_response=ai_response,
+            user_name=x_inovator
+        )
+
+        # Clean up temporary file
+        try:
+            os.remove(local_path)
+        except Exception:
+            pass
+
+        return JSONResponse({
+            "chat_id": chat_id,
+            "innovation_id": innovation_id,
+            "question": question,
+            "answer": ai_response,
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "innovation_name": innovation_data['nama_inovasi']
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Clean up temporary file in case of error
+        try:
+            if 'local_path' in locals():
+                os.remove(local_path)
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Chat processing failed: {e}")
+
+@app.get("/innovations/{innovation_id}/chat_history")
+async def get_chat_history(
+    innovation_id: str,
+    limit: int = 50,
+    table_name: str = "innovations",
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk mendapatkan riwayat percakapan untuk suatu inovasi.
+    """
+    try:
+        # Verify innovation exists and user has access
+        conn = await db.connect_to_db()
+        row = await conn.fetchrow(
+            f"SELECT nama_inovator FROM {table_name} WHERE id = $1", 
+            innovation_id
+        )
+        
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Innovation not found")
+        
+        # Check access
+        if row['nama_inovator'] != x_inovator.lower().replace(" ", "_"):
+            await conn.close()
+            raise HTTPException(status_code=403, detail="Access denied to this innovation")
+        
+        await conn.close()
+
+        # Get chat history
+        chat_history = await db.get_chat_history(innovation_id, limit)
+        
+        return JSONResponse({
+            "innovation_id": innovation_id,
+            "total_conversations": len(chat_history),
+            "chat_history": chat_history
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chat history: {e}")
+
+@app.get("/users/{user_name}/chat_summary")
+async def get_user_chat_summary(
+    user_name: str,
+    table_name: str = "innovations",
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk mendapatkan ringkasan semua percakapan user.
+    """
+    try:
+        # Verify user access
+        if x_inovator.lower().replace(" ", "_") != user_name.lower().replace(" ", "_"):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get user's chat summary
+        chat_summary = await db.get_user_chat_summary(user_name)
+        
+        return JSONResponse({
+            "user_name": user_name,
+            "total_innovations_discussed": len(chat_summary),
+            "chat_summary": chat_summary
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chat summary: {e}")
+
+@app.post("/chat/search")
+async def search_chat_history(
+    search_query: str = Form(...),
+    innovation_id: str = Form(None),
+    table_name: str = Form("innovations"),
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk mencari dalam riwayat percakapan berdasarkan kata kunci.
+    """
+    try:
+        if not search_query.strip():
+            raise HTTPException(status_code=400, detail="Search query cannot be empty")
+
+        # Search chat history
+        search_results = await db.search_chat_history(
+            search_query=search_query,
+            user_name=x_inovator,
+            innovation_id=innovation_id,
+            table_name=table_name
+        )
+        
+        return JSONResponse({
+            "search_query": search_query,
+            "user_name": x_inovator,
+            "innovation_id": innovation_id,
+            "total_results": len(search_results),
+            "results": search_results
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+
+@app.delete("/innovations/{innovation_id}/chat_history")
+async def delete_chat_history(
+    innovation_id: str,
+    table_name: str = "innovations",
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk menghapus riwayat percakapan untuk suatu inovasi.
+    """
+    try:
+        # Verify innovation exists and user has access
+        conn = await db.connect_to_db()
+        row = await conn.fetchrow(
+            f"SELECT nama_inovator FROM {table_name} WHERE id = $1", 
+            innovation_id
+        )
+        
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Innovation not found")
+        
+        # Check access
+        if row['nama_inovator'] != x_inovator.lower().replace(" ", "_"):
+            await conn.close()
+            raise HTTPException(status_code=403, detail="Access denied to this innovation")
+        
+        # Delete chat history
+        result = await conn.execute(
+            f"DELETE FROM {table_name}_chat_history WHERE innovation_id = $1", 
+            innovation_id
+        )
+        
+        await conn.close()
+        
+        # Extract number of deleted rows
+        deleted_count = int(result.split()[-1]) if result and result.split()[-1].isdigit() else 0
+        
+        return JSONResponse({
+            "message": "Chat history deleted successfully",
+            "innovation_id": innovation_id,
+            "deleted_conversations": deleted_count
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete chat history: {e}")
+
+@app.get("/innovations/{innovation_id}/chat_analytics")
+async def get_chat_analytics(
+    innovation_id: str,
+    table_name: str = "innovations",
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk mendapatkan analitik percakapan untuk suatu inovasi.
+    """
+    try:
+        # Verify access
+        conn = await db.connect_to_db()
+        row = await conn.fetchrow(
+            f"SELECT nama_inovator, nama_inovasi FROM {table_name} WHERE id = $1", 
+            innovation_id
+        )
+        
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Innovation not found")
+        
+        if row['nama_inovator'] != x_inovator.lower().replace(" ", "_"):
+            await conn.close()
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get chat analytics
+        analytics = await conn.fetchrow(f"""
+            SELECT 
+                COUNT(*) as total_conversations,
+                COUNT(DISTINCT DATE(created_at)) as active_days,
+                AVG(LENGTH(user_question)) as avg_question_length,
+                AVG(LENGTH(ai_response)) as avg_response_length,
+                MIN(created_at) as first_conversation,
+                MAX(created_at) as last_conversation
+            FROM {table_name}_chat_history 
+            WHERE innovation_id = $1
+        """, innovation_id)
+        
+        # Get most common question patterns (simple word frequency)
+        common_words = await conn.fetch(f"""
+            SELECT word, COUNT(*) as frequency
+            FROM (
+                SELECT unnest(string_to_array(lower(user_question), ' ')) as word
+                FROM {table_name}_chat_history 
+                WHERE innovation_id = $1
+            ) words
+            WHERE LENGTH(word) > 3
+              AND word NOT IN ('yang', 'adalah', 'untuk', 'dari', 'dengan', 'pada', 'dalam', 'atau', 'dan', 'ini', 'itu', 'akan', 'dapat', 'tidak', 'ada', 'juga', 'saya', 'anda', 'bagaimana', 'mengapa', 'apakah')
+            GROUP BY word
+            ORDER BY frequency DESC
+            LIMIT 10
+        """, innovation_id)
+        
+        await conn.close()
+        
+        return JSONResponse({
+            "innovation_id": innovation_id,
+            "innovation_name": row['nama_inovasi'],
+            "analytics": {
+                "total_conversations": analytics['total_conversations'] if analytics else 0,
+                "active_days": analytics['active_days'] if analytics else 0,
+                "avg_question_length": round(float(analytics['avg_question_length']) if analytics and analytics['avg_question_length'] else 0, 2),
+                "avg_response_length": round(float(analytics['avg_response_length']) if analytics and analytics['avg_response_length'] else 0, 2),
+                "first_conversation": analytics['first_conversation'].isoformat() if analytics and analytics['first_conversation'] else None,
+                "last_conversation": analytics['last_conversation'].isoformat() if analytics and analytics['last_conversation'] else None
+            },
+            "common_question_words": [
+                {"word": row['word'], "frequency": row['frequency']} 
+                for row in common_words
+            ]
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chat analytics: {e}")
+    
+@app.get("/innovations/by_inovator")
+async def get_innovations_by_inovator(
+    x_inovator: str = Header(..., alias="X-Inovator"),
+    table_name: str = "innovations"
+):
+    """
+    Endpoint untuk mendapatkan semua innovation ID berdasarkan nama inovator.
+    Nama inovator diambil dari header X-Inovator.
+    Handle spasi dalam nama dengan mengganti menjadi underscore.
+    """
+    try:
+        # Get innovation IDs from database
+        innovation_ids = await db.get_innovation_ids_by_inovator(x_inovator, table_name)
+        
+        return JSONResponse({
+            "inovator_name": x_inovator,
+            "processed_inovator_name": x_inovator.lower().replace(" ", "_"),
+            "total_innovations": len(innovation_ids),
+            "innovation_ids": innovation_ids
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get innovations: {e}")
