@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Header
 from starlette.responses import JSONResponse
 from module.vector import PostgreDB
 import logging
@@ -12,6 +12,24 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
+from dotenv import load_dotenv
+import os
+
+# Load env variables
+load_dotenv()
+
+# Komponen penilaian dari env
+INOVASI_SCORING = {
+    "substansi_orisinalitas": int(os.getenv("SCORING_SUBSTANSI_ORISINALITAS", 15)),
+    "substansi_urgensi": int(os.getenv("SCORING_SUBSTANSI_URGENSI", 10)),
+    "substansi_kedalaman": int(os.getenv("SCORING_SUBSTANSI_KEDALAMAN", 15)),
+    "analisis_dampak": int(os.getenv("SCORING_ANALISIS_DAMPAK", 15)),
+    "analisis_kelayakan": int(os.getenv("SCORING_ANALISIS_KELAYAKAN", 10)),
+    "analisis_data": int(os.getenv("SCORING_ANALISIS_DATA", 10)),
+    "sistematika_struktur": int(os.getenv("SCORING_SISTEMATIKA_STRUKTUR", 10)),
+    "sistematika_bahasa": int(os.getenv("SCORING_SISTEMATIKA_BAHASA", 10)),
+    "sistematika_referensi": int(os.getenv("SCORING_SISTEMATIKA_REFERENSI", 5)),
+}
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -92,23 +110,90 @@ def lsa_similarity(query_text, documents):
     # Hitung cosine similarity antar dokumen
     return cosine_similarity(lsa_matrix, lsa_matrix)
 
+def generate_inovasi_id(judul_inovasi: str, nama_inovator: str) -> str:
+    """Generate unique id for inovasi based on judul and inovator."""
+    return f"{judul_inovasi.lower().replace(' ', '_')}_{nama_inovator.lower().replace(' ', '_')}"
+
+def build_inovasi_dataframe(local_path, judul_inovasi, x_inovator, extracted):
+    """Build DataFrame for inovasi upload."""
+    return pd.DataFrame([{
+        "pdf_path": str(local_path),
+        "nama_inovasi": judul_inovasi.lower().replace(" ", "_"),
+        "nama_inovator": x_inovator.lower().replace(" ", "_"),
+        "id": generate_inovasi_id(judul_inovasi, x_inovator),
+        "latar_belakang": extracted.get("latar_belakang", "TIDAK DITEMUKAN"),
+        "tujuan_inovasi": extracted.get("tujuan_inovasi", "TIDAK DITEMUKAN"),
+        "deskripsi_inovasi": extracted.get("deskripsi_inovasi", "TIDAK DITEMUKAN"),
+    }])
+
+def generate_ai_summary(extracted_sections, judul_inovasi):
+    """Generate AI summary from extracted sections"""
+    try:
+        # Create a comprehensive summary prompt
+        latar_belakang = extracted_sections.get('latar_belakang', 'Tidak tersedia')
+        tujuan_inovasi = extracted_sections.get('tujuan_inovasi', 'Tidak tersedia')
+        deskripsi_inovasi = extracted_sections.get('deskripsi_inovasi', 'Tidak tersedia')
+        
+        summary_prompt = f"""
+        Berdasarkan informasi dari dokumen inovasi "{judul_inovasi}", buatlah ringkasan komprehensif dan informatif.
+
+        **Data Inovasi:**
+        - Judul: {judul_inovasi}
+        - Latar Belakang: {latar_belakang[:500]}...
+        - Tujuan: {tujuan_inovasi[:300]}...
+        - Deskripsi: {deskripsi_inovasi[:400]}...
+
+        **Instruksi Ringkasan:**
+        Buatlah ringkasan dalam format JSON dengan struktur berikut:
+        {{
+            "ringkasan_singkat": "Ringkasan 2-3 kalimat tentang inti inovasi",
+            "masalah_yang_diatasi": "Masalah utama yang ingin diselesaikan",
+            "solusi_yang_ditawarkan": "Pendekatan atau solusi yang diusulkan",
+            "potensi_manfaat": "Manfaat dan dampak yang diharapkan",
+            "keunikan_inovasi": "Aspek yang membedakan dari solusi lain"
+        }}
+
+        Pastikan ringkasan objektif, informatif, dan mudah dipahami.
+        """
+        
+        # Use a simple text prompt instead of PDF for summary generation
+        summary_result = db.extractor.model.generate_content([summary_prompt])
+        
+        if summary_result and summary_result.text:
+            try:
+                # Try to parse as JSON
+                json_match = re.search(r'\{.*\}', summary_result.text, re.DOTALL)
+                if json_match:
+                    summary_json = json.loads(json_match.group())
+                    return summary_json
+                else:
+                    return {"ringkasan_umum": summary_result.text.strip()}
+            except:
+                return {"ringkasan_umum": summary_result.text.strip()}
+        else:
+            return {"error": "Ringkasan tidak dapat dibuat"}
+            
+    except Exception as e:
+        logger.error(f"Failed to generate AI summary: {e}")
+        return {"error": f"Gagal membuat ringkasan: {str(e)}"}
+
 @app.post("/innovations/")
 async def upload_innovation(
     judul_inovasi: str = Form(...),
     file: UploadFile = File(...),
-    table_name: str = Form("innovations")
+    table_name: str = Form("innovations"),
+    x_inovator: str = Header(..., alias="X-Inovator")
 ):
     """
     Endpoint untuk upload PDF inovasi dan judulnya.
+    User login inovator diambil dari header X-Inovator.
     Alur:
     1. Simpan file PDF ke disk lokal.
     2. Ekstrak section penting dari PDF (latar belakang, tujuan inovasi, deskripsi inovasi).
     3. Buat DataFrame dari hasil ekstraksi.
     4. Simpan data ke database dan upload file ke MinIO, serta generate vector embeddings.
-    5. Setelah data tersimpan, lakukan vector search untuk mencari dokumen mirip.
-    6. Gabungkan kolom penting dari hasil vector search.
-    7. Hitung similarity LSA antara dokumen baru dan hasil vector search.
-    8. Kembalikan hasil berupa skor similarity LSA dan link dokumen MinIO.
+    5. Generate ringkasan AI dari dokumen.
+    6. Return ringkasan dan status code.
     """
     # 1. Save the uploaded PDF
     ext = Path(file.filename).suffix
@@ -135,13 +220,7 @@ async def upload_innovation(
         raise HTTPException(status_code=500, detail=f"Extraction error for file '{local_path}': {e}")
 
     # 3. Build a pandas DataFrame in the expected shape
-    df = pd.DataFrame([{
-        "pdf_path": str(local_path),  # This will be used for processing only
-        "nama_inovasi": judul_inovasi.lower().replace(" ", "_"),
-        "latar_belakang": extracted.get("latar_belakang", "TIDAK DITEMUKAN"),
-        "tujuan_inovasi": extracted.get("tujuan_inovasi", "TIDAK DITEMUKAN"),
-        "deskripsi_inovasi": extracted.get("deskripsi_inovasi", "TIDAK DITEMUKAN"),
-    }])
+    df = build_inovasi_dataframe(local_path, judul_inovasi, x_inovator, extracted)
     
     logger.info(f"DataFrame created with extracted data:")
     for col in ["latar_belakang", "tujuan_inovasi", "deskripsi_inovasi"]:
@@ -152,48 +231,246 @@ async def upload_innovation(
     # 4. Invoke build_table to persist and index
     try:
         status = await db.build_table(df, table_name)
-        logger.info(f'Build table status: {status}')
+        # logger.info(f'Build table status: {status}')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"build_table failed for '{table_name}': {e}")
 
-    # 5. Setelah build_table, lakukan similarity search
+    # 5. Generate AI summary
     try:
-        # Gabungkan kolom untuk query
-        query_text = f"{df['latar_belakang'].iloc[0]} {df['tujuan_inovasi'].iloc[0]} {df['deskripsi_inovasi'].iloc[0]}"
-        uploaded_id = df['nama_inovasi'].iloc[0] if 'nama_inovasi' in df.columns else None
-        # Vector search
-        results = await db.similarity_search_plagiarisme(
-            query_text, 0.7, 10, table_name
-        )
-        print("result---",results)
-        if isinstance(results, dict) and "message" in results:
-            lsa_results = []
-        else:
-            # Filter out the uploaded document itself from results (by id or unique field)
-            filtered_results = [r for r in results if r.get('id') != df['id'].iloc[0]]
-            # Gabungkan kolom untuk setiap dokumen hasil vector search
-            doc_texts = [
-                f"{r['latar_belakang']} {r['tujuan_inovasi']} {r['deskripsi_inovasi']}"
-                for r in filtered_results
-            ]
-            lsa_sim_matrix = lsa_similarity(query_text, doc_texts)
-            lsa_results = []
-            for i, r in enumerate(filtered_results):
-                lsa_score = float(lsa_sim_matrix[0, i+1]) if lsa_sim_matrix.shape[0] > 1 else 0.0
-                lsa_results.append({
-                    "lsa_similarity": round(lsa_score, 4),
-                    "link_document": r["link_document"]
-                })
+        ai_summary = generate_ai_summary(extracted, judul_inovasi)
     except Exception as e:
-        logger.error(f"Similarity check failed: {e}")
-        lsa_results = []
+        logger.error(f"Failed to generate AI summary: {e}")
+        ai_summary = "Ringkasan tidak dapat dibuat"
 
     return JSONResponse({
-        "status": status, 
+        "status": "success", 
+        "code": 200,
         "table": table_name,
         "extracted_sections": {
             sec: "✓" if extracted.get(sec) and extracted[sec] != "TIDAK DITEMUKAN" else "✗"
             for sec in sections
         },
-        "lsa_similarity_results": lsa_results
+        "ai_summary": ai_summary,
+        "innovation_id": df['id'].iloc[0]
     })
+
+@app.post("/get_score")
+async def get_score(
+    id: str = Form(...),
+    table_name: str = Form("innovations"),
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk menilai inovasi berdasarkan komponen penilaian dari env.
+    File diambil dari MinIO, tidak upload ulang.
+    Juga melakukan LSA similarity check dan menyimpan hasil ke database.
+    """
+    # Get innovation data from database
+    try:
+        conn = await db.connect_to_db()
+        row = await conn.fetchrow(
+            f"""SELECT link_document, nama_inovasi, nama_inovator, 
+                      latar_belakang, tujuan_inovasi, deskripsi_inovasi 
+               FROM {table_name} WHERE id = $1""", 
+            id
+        )
+        if not row or not row["link_document"]:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Innovation not found or link_document missing")
+        
+        innovation_data = dict(row)
+        await conn.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get innovation data: {e}")
+
+    # Parse object name from link_document
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(innovation_data["link_document"])
+        object_path = parsed.path.lstrip("/")
+        parts = object_path.split("/", 1)
+        if len(parts) != 2:
+            raise Exception("Invalid link_document format")
+        bucket_name, object_name = parts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse object name: {e}")
+
+    # Download file from MinIO
+    local_path = UPLOAD_DIR / f"{id}.pdf"
+    try:
+        db.minio_client.fget_object(bucket_name, object_name, str(local_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download file from MinIO: {e}")
+
+    # Get scoring using multimodal_model
+    try:
+        prompt = db.extractor.build_scoring_prompt()
+        result = db.extractor.extract_with_custom_prompt(str(local_path), prompt)
+        if result:
+            try:
+                # Clean and parse JSON
+                cleaned_result = result.replace("'", '"')
+                score_json = json.loads(cleaned_result)
+                
+                # Save scoring results to database
+                if isinstance(score_json, dict) and "error" not in score_json:
+                    await db.save_scoring_results(id, score_json)
+                    
+            except Exception:
+                # Try to extract JSON from text
+                json_match = re.search(r'\{.*\}', result, re.DOTALL)
+                if json_match:
+                    try:
+                        score_json = json.loads(json_match.group().replace("'", '"'))
+                        # Save scoring results to database
+                        if isinstance(score_json, dict) and "error" not in score_json:
+                            await db.save_scoring_results(id, score_json)
+                    except:
+                        score_json = {"raw": result, "error": "Failed to parse scoring JSON"}
+                else:
+                    score_json = {"raw": result, "error": "No JSON found in response"}
+        else:
+            score_json = {"error": "No result from model"}
+    except Exception as e:
+        score_json = {"error": str(e)}
+
+    # Perform LSA similarity check
+    try:
+        # Combine sections for query
+        query_text = f"{innovation_data['latar_belakang']} {innovation_data['tujuan_inovasi']} {innovation_data['deskripsi_inovasi']}"
+        
+        # Vector search for similar documents (excluding current document)
+        results = await db.similarity_search_plagiarisme(
+            query_text, 0.7, 10, table_name
+        )
+        
+        lsa_results = []
+        if not isinstance(results, dict) or "message" not in results:
+            # Filter out the current document
+            filtered_results = [r for r in results if r.get('id') != id]
+            
+            # Prepare texts for LSA
+            doc_texts = [
+                f"{r['latar_belakang']} {r['tujuan_inovasi']} {r['deskripsi_inovasi']}"
+                for r in filtered_results
+            ]
+            
+            if doc_texts:
+                lsa_sim_matrix = lsa_similarity(query_text, doc_texts)
+                for i, r in enumerate(filtered_results):
+                    lsa_score = float(lsa_sim_matrix[0, i+1]) if lsa_sim_matrix.shape[0] > 1 else 0.0
+                    lsa_results.append({
+                        "similarity_score": round(lsa_score, 4),
+                        "link_document": r["link_document"],
+                        "nama_inovator": r.get("nama_inovator", "Unknown"),
+                        "compared_innovation_id": r.get("id", "Unknown")
+                    })
+        
+        # Save LSA results to database
+        await db.save_lsa_results(id, lsa_results)
+        
+    except Exception as e:
+        logger.error(f"LSA similarity check failed: {e}")
+        lsa_results = []
+
+    # Clean up downloaded file
+    try:
+        os.remove(local_path)
+    except Exception:
+        pass
+
+    # Prepare response with component scores and total
+    response_data = {
+        "innovation_id": id,
+        "nama_inovasi": innovation_data["nama_inovasi"],
+        "nama_inovator": innovation_data["nama_inovator"],
+        "link_document": innovation_data["link_document"],
+        "component_scores": {},
+        "total_score": 0,
+        "plagiarism_check": lsa_results
+    }
+
+    # Extract component scores if available
+    if isinstance(score_json, dict) and "error" not in score_json:
+        for component in INOVASI_SCORING.keys():
+            if component in score_json:
+                response_data["component_scores"][component] = score_json[component]
+        
+        response_data["total_score"] = score_json.get("total", 0)
+    else:
+        response_data["scoring_error"] = score_json
+
+    return JSONResponse(response_data)
+
+@app.get("/innovations/{innovation_id}/lsa_results")
+async def get_innovation_lsa_results(
+    innovation_id: str,
+    table_name: str = "innovations"
+):
+    """
+    Endpoint untuk mendapatkan hasil LSA similarity yang sudah tersimpan untuk suatu inovasi
+    """
+    try:
+        lsa_results = await db.get_lsa_results(innovation_id, table_name)
+        
+        if not lsa_results:
+            return JSONResponse({
+                "message": "No LSA results found for this innovation",
+                "innovation_id": innovation_id,
+                "results": []
+            })
+        
+        return JSONResponse({
+            "innovation_id": innovation_id,
+            "total_similar_documents": len(lsa_results),
+            "lsa_results": lsa_results
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get LSA results: {e}")
+
+@app.get("/innovations/{innovation_id}/summary")
+async def get_innovation_summary(
+    innovation_id: str,
+    table_name: str = "innovations"
+):
+    """
+    Endpoint untuk mendapatkan ringkasan inovasi berdasarkan data yang tersimpan
+    """
+    try:
+        # Get innovation data from database
+        conn = await db.connect_to_db()
+        row = await conn.fetchrow(
+            f"""SELECT nama_inovasi, nama_inovator, latar_belakang, 
+                      tujuan_inovasi, deskripsi_inovasi, link_document
+               FROM {table_name} WHERE id = $1""", 
+            innovation_id
+        )
+        await conn.close()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Innovation not found")
+        
+        innovation_data = dict(row)
+        
+        # Generate fresh summary
+        extracted = {
+            'latar_belakang': innovation_data['latar_belakang'],
+            'tujuan_inovasi': innovation_data['tujuan_inovasi'],
+            'deskripsi_inovasi': innovation_data['deskripsi_inovasi']
+        }
+        
+        ai_summary = generate_ai_summary(extracted, innovation_data['nama_inovasi'])
+        
+        return JSONResponse({
+            "innovation_id": innovation_id,
+            "nama_inovasi": innovation_data['nama_inovasi'],
+            "nama_inovator": innovation_data['nama_inovator'],
+            "link_document": innovation_data['link_document'],
+            "ai_summary": ai_summary
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {e}")

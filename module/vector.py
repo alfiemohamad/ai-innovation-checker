@@ -103,23 +103,78 @@ class PostgreDB:
     async def generateHNSWIndexing(self, table_name: str, m: int, operator: str, ef_construction: int, lists: int):
         conn = await self.connect_to_db()
         await register_vector(conn)
-        await conn.execute(
-            f"""CREATE INDEX ON {table_name}_embeddings
-                USING hnsw(embedding {operator})
-                WITH (m = {m}, ef_construction = {ef_construction})
-            """
-        )
+        try:
+            await conn.execute(
+                f"""CREATE INDEX IF NOT EXISTS {table_name}_embeddings_hnsw_idx
+                    ON {table_name}_embeddings
+                    USING hnsw(embedding {operator})
+                    WITH (m = {m}, ef_construction = {ef_construction})
+                """
+            )
+        except Exception as e:
+            print(f"Warning: Could not create HNSW index: {e}")
         await conn.close()
 
     async def dropVectorTable(self, table_name: str):
         conn = await self.connect_to_db()
         await conn.execute(f"DROP TABLE IF EXISTS {table_name}_embeddings")
+        await conn.execute(f"DROP TABLE IF EXISTS {table_name}_lsa_results CASCADE")
+        await conn.execute(f"DROP TABLE IF EXISTS {table_name}_scoring CASCADE")
         await conn.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
         await conn.close()
 
     async def clean_text(self, text: str) -> str:
         import re
         return re.sub(r"[^a-zA-Z0-9\s.,<>=]", "", text)
+    
+    async def create_lsa_results_table(self, table_name: str):
+        """Create table to store LSA similarity results"""
+        conn = await self.connect_to_db()
+        await conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table_name}_lsa_results (
+                id SERIAL PRIMARY KEY,
+                innovation_id VARCHAR(1024) NOT NULL REFERENCES {table_name}(id),
+                compared_innovation_id VARCHAR(1024),
+                similarity_score FLOAT,
+                link_document TEXT,
+                nama_inovator TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.close()
+
+    async def save_lsa_results(self, innovation_id: str, lsa_results: list, table_name: str = "innovations"):
+        """Save LSA similarity results to database"""
+        try:
+            # Ensure LSA results table exists
+            await self.create_lsa_results_table(table_name)
+            
+            conn = await self.connect_to_db()
+            
+            # Clear previous results for this innovation
+            await conn.execute(
+                f"DELETE FROM {table_name}_lsa_results WHERE innovation_id = $1",
+                innovation_id
+            )
+            
+            # Insert new results
+            for result in lsa_results:
+                await conn.execute(
+                    f"""INSERT INTO {table_name}_lsa_results 
+                        (innovation_id, compared_innovation_id, similarity_score, link_document, nama_inovator)
+                        VALUES ($1, $2, $3, $4, $5)""",
+                    innovation_id,
+                    result.get("compared_innovation_id"),
+                    result.get("similarity_score"),
+                    result.get("link_document"),
+                    result.get("nama_inovator")
+                )
+            
+            await conn.close()
+            print(f"Saved {len(lsa_results)} LSA results for innovation {innovation_id}")
+            
+        except Exception as e:
+            print(f"Failed to save LSA results: {e}")
     
     async def build_table(
         self,
@@ -178,6 +233,7 @@ class PostgreDB:
             CREATE TABLE IF NOT EXISTS {table_name} (
                 id VARCHAR(1024) PRIMARY KEY,
                 nama_inovasi TEXT,
+                nama_inovator TEXT,
                 bucket_name TEXT,
                 link_document TEXT,
                 latar_belakang TEXT,
@@ -194,6 +250,10 @@ class PostgreDB:
                 PRIMARY KEY (id, content)
             )
             """
+
+        # Create LSA results table and scoring table
+        await self.create_lsa_results_table(table_name)
+        await self.create_scoring_table(table_name)
 
         # *** IMPORTANT FIX: Drop pdf_path column before saving to database ***
         # pdf_path was only needed for processing, not for database storage
@@ -270,6 +330,106 @@ class PostgreDB:
         except json.JSONDecodeError as e:
             print(f"Failed to parse JSON from raw text: {e}")
 
+    async def create_scoring_table(self, table_name: str):
+        """Create table to store scoring results"""
+        conn = await self.connect_to_db()
+        await conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table_name}_scoring (
+                id SERIAL PRIMARY KEY,
+                innovation_id VARCHAR(1024) NOT NULL REFERENCES {table_name}(id),
+                substansi_orisinalitas INTEGER,
+                substansi_urgensi INTEGER,
+                substansi_kedalaman INTEGER,
+                analisis_dampak INTEGER,
+                analisis_kelayakan INTEGER,
+                analisis_data INTEGER,
+                sistematika_struktur INTEGER,
+                sistematika_bahasa INTEGER,
+                sistematika_referensi INTEGER,
+                total_score INTEGER,
+                scoring_raw_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(innovation_id)
+            )
+        """)
+        await conn.close()
+
+    async def save_scoring_results(self, innovation_id: str, scoring_data: dict, table_name: str = "innovations"):
+        """Save scoring results to database"""
+        try:
+            # Ensure scoring table exists
+            await self.create_scoring_table(table_name)
+            
+            conn = await self.connect_to_db()
+            
+            # Prepare scoring values
+            scoring_values = {
+                'substansi_orisinalitas': scoring_data.get('substansi_orisinalitas'),
+                'substansi_urgensi': scoring_data.get('substansi_urgensi'),
+                'substansi_kedalaman': scoring_data.get('substansi_kedalaman'),
+                'analisis_dampak': scoring_data.get('analisis_dampak'),
+                'analisis_kelayakan': scoring_data.get('analisis_kelayakan'),
+                'analisis_data': scoring_data.get('analisis_data'),
+                'sistematika_struktur': scoring_data.get('sistematika_struktur'),
+                'sistematika_bahasa': scoring_data.get('sistematika_bahasa'),
+                'sistematika_referensi': scoring_data.get('sistematika_referensi'),
+                'total_score': scoring_data.get('total'),
+                'scoring_raw_data': json.dumps(scoring_data)
+            }
+            
+            # Upsert scoring data
+            await conn.execute(f"""
+                INSERT INTO {table_name}_scoring 
+                (innovation_id, substansi_orisinalitas, substansi_urgensi, substansi_kedalaman,
+                 analisis_dampak, analisis_kelayakan, analisis_data, sistematika_struktur,
+                 sistematika_bahasa, sistematika_referensi, total_score, scoring_raw_data)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ON CONFLICT (innovation_id) DO UPDATE SET
+                    substansi_orisinalitas = EXCLUDED.substansi_orisinalitas,
+                    substansi_urgensi = EXCLUDED.substansi_urgensi,
+                    substansi_kedalaman = EXCLUDED.substansi_kedalaman,
+                    analisis_dampak = EXCLUDED.analisis_dampak,
+                    analisis_kelayakan = EXCLUDED.analisis_kelayakan,
+                    analisis_data = EXCLUDED.analisis_data,
+                    sistematika_struktur = EXCLUDED.sistematika_struktur,
+                    sistematika_bahasa = EXCLUDED.sistematika_bahasa,
+                    sistematika_referensi = EXCLUDED.sistematika_referensi,
+                    total_score = EXCLUDED.total_score,
+                    scoring_raw_data = EXCLUDED.scoring_raw_data,
+                    created_at = CURRENT_TIMESTAMP
+            """, innovation_id, *scoring_values.values())
+            
+            await conn.close()
+            print(f"Saved scoring results for innovation {innovation_id}")
+            
+        except Exception as e:
+            print(f"Failed to save scoring results: {e}")
+
+    async def get_lsa_results(self, innovation_id: str, table_name: str = "innovations"):
+        """Get LSA similarity results for an innovation"""
+        try:
+            conn = await self.connect_to_db()
+            results = await conn.fetch(
+                f"""SELECT compared_innovation_id, similarity_score, link_document, nama_inovator, created_at
+                    FROM {table_name}_lsa_results 
+                    WHERE innovation_id = $1 
+                    ORDER BY similarity_score DESC""",
+                innovation_id
+            )
+            await conn.close()
+            
+            return [
+                {
+                    "compared_innovation_id": r["compared_innovation_id"],
+                    "similarity_score": r["similarity_score"],
+                    "link_document": r["link_document"],
+                    "nama_inovator": r["nama_inovator"],
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None
+                } for r in results
+            ]
+        except Exception as e:
+            print(f"Failed to get LSA results: {e}")
+            return []
 
     async def similarity_search_plagiarisme(
         self,
@@ -298,6 +458,8 @@ class PostgreDB:
             )
             SELECT
                 t.id,
+                t.nama_inovasi,
+                t.nama_inovator,
                 t.latar_belakang,
                 t.tujuan_inovasi,
                 t.deskripsi_inovasi,
@@ -316,6 +478,8 @@ class PostgreDB:
         return [
             {
                 "id": r["id"],
+                "nama_inovasi": r["nama_inovasi"],
+                "nama_inovator": r["nama_inovator"],
                 "latar_belakang": r["latar_belakang"],
                 "tujuan_inovasi": r["tujuan_inovasi"],
                 "deskripsi_inovasi": r["deskripsi_inovasi"],
@@ -323,7 +487,3 @@ class PostgreDB:
                 "similarity": r["similarity"]
             } for r in results
         ]
-
-
-
-

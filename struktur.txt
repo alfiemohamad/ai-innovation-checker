@@ -1,0 +1,24 @@
+./ai-innovation-checker
+├── __pycache__
+│   └── main.cpython-311.pyc
+├── .env
+├── .gitignore
+├── config
+│   ├── __pycache__
+│   │   └── config.cpython-311.pyc
+│   ├── config.py
+│   └── key
+│       └── vertex.json
+├── main.py
+├── module
+│   ├── __pycache__
+│   │   ├── multimodal_model.cpython-311.pyc
+│   │   └── vector.cpython-311.pyc
+│   ├── multimodal_model.py
+│   └── vector.py
+├── requirements.txt
+├── struktur.txt
+├── test.ipynb
+└── uploads
+
+67 directories, 86 files

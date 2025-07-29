@@ -174,3 +174,54 @@ class GeminiPDFExtractor:
         except Exception as e:
             logger.error(f"Failed to extract with custom prompt: {e}")
             return None
+    
+    @staticmethod
+    def build_scoring_prompt(scoring_dict=None):
+        """Build prompt for scoring using env config."""
+        if scoring_dict is None:
+            import os
+            scoring_dict = {
+                "substansi_orisinalitas": int(os.getenv("SCORING_SUBSTANSI_ORISINALITAS", 15)),
+                "substansi_urgensi": int(os.getenv("SCORING_SUBSTANSI_URGENSI", 10)),
+                "substansi_kedalaman": int(os.getenv("SCORING_SUBSTANSI_KEDALAMAN", 15)),
+                "analisis_dampak": int(os.getenv("SCORING_ANALISIS_DAMPAK", 15)),
+                "analisis_kelayakan": int(os.getenv("SCORING_ANALISIS_KELAYAKAN", 10)),
+                "analisis_data": int(os.getenv("SCORING_ANALISIS_DATA", 10)),
+                "sistematika_struktur": int(os.getenv("SCORING_SISTEMATIKA_STRUKTUR", 10)),
+                "sistematika_bahasa": int(os.getenv("SCORING_SISTEMATIKA_BAHASA", 10)),
+                "sistematika_referensi": int(os.getenv("SCORING_SISTEMATIKA_REFERENSI", 5)),
+            }
+        prompt = """
+        Berikan penilaian untuk dokumen PDF ini berdasarkan komponen berikut (skor maksimal di dalam kurung):\n\n"""
+        prompt += "I. Substansi & Gagasan Inovasi\n"
+        prompt += f"A. Orisinalitas dan Kebaruan ({scoring_dict['substansi_orisinalitas']})\n"
+        prompt += f"B. Urgensi dan Relevansi Masalah ({scoring_dict['substansi_urgensi']})\n"
+        prompt += f"C. Kejelasan dan Kedalaman Gagasan ({scoring_dict['substansi_kedalaman']})\n"
+        prompt += "II. Analisis, Potensi, & Kelayakan\n"
+        prompt += f"A. Potensi Dampak dan Manfaat ({scoring_dict['analisis_dampak']})\n"
+        prompt += f"B. Analisis Kelayakan Implementasi ({scoring_dict['analisis_kelayakan']})\n"
+        prompt += f"C. Kekuatan Data dan Argumen ({scoring_dict['analisis_data']})\n"
+        prompt += "III. Sistematika & Kualitas Penulisan\n"
+        prompt += f"A. Struktur dan Alur Logika ({scoring_dict['sistematika_struktur']})\n"
+        prompt += f"B. Kualitas Bahasa dan Tata Tulis ({scoring_dict['sistematika_bahasa']})\n"
+        prompt += f"C. Penggunaan Referensi dan Sitasi ({scoring_dict['sistematika_referensi']})\n\n"
+        prompt += "Berikan hasil penilaian dalam format JSON seperti contoh berikut:\n{\n  'substansi_orisinalitas': 12,\n  'substansi_urgensi': 8,\n  'substansi_kedalaman': 13,\n  'analisis_dampak': 14,\n  'analisis_kelayakan': 9,\n  'analisis_data': 8,\n  'sistematika_struktur': 9,\n  'sistematika_bahasa': 8,\n  'sistematika_referensi': 4,\n  'total': 85\n}\n"
+        return prompt
+
+    @staticmethod
+    def generate_inovasi_id(judul_inovasi: str, nama_inovator: str) -> str:
+        """Generate unique id for inovasi based on judul and inovator."""
+        return f"{judul_inovasi.lower().replace(' ', '_')}_{nama_inovator.lower().replace(' ', '_')}"
+
+    @staticmethod
+    def build_inovasi_dataframe(local_path, judul_inovasi, x_inovator, extracted):
+        import pandas as pd
+        return pd.DataFrame([{
+            "pdf_path": str(local_path),
+            "nama_inovasi": judul_inovasi.lower().replace(" ", "_"),
+            "nama_inovator": x_inovator.lower().replace(" ", "_"),
+            "id": GeminiPDFExtractor.generate_inovasi_id(judul_inovasi, x_inovator),
+            "latar_belakang": extracted.get("latar_belakang", "TIDAK DITEMUKAN"),
+            "tujuan_inovasi": extracted.get("tujuan_inovasi", "TIDAK DITEMUKAN"),
+            "deskripsi_inovasi": extracted.get("deskripsi_inovasi", "TIDAK DITEMUKAN"),
+        }])
