@@ -1,140 +1,129 @@
 # AI Innovation Checker
 
-Sistem ini adalah platform untuk mengelola, menilai, dan melakukan pengecekan kemiripan (plagiarisme) dokumen inovasi berbasis PDF menggunakan teknologi AI (Google Vertex AI Gemini, LangChain, dan vektor database).
+AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan melakukan pengecekan kemiripan (plagiarisme) dokumen inovasi berbasis PDF menggunakan teknologi AI (Google Vertex AI Gemini, LangChain, vektor database, MinIO, dan FastAPI). Sistem ini menyediakan dashboard interaktif, upload PDF, penilaian otomatis, chat AI, analitik, dan fitur chatbot mengambang.
 
-## Deskripsi Singkat
-- **Upload dokumen inovasi** (PDF) oleh user/inovator.
-- **Ekstraksi otomatis** bagian penting (latar belakang, tujuan, deskripsi) dari PDF menggunakan model multimodal.
-- **Penyimpanan** dokumen di MinIO dan metadata di PostgreSQL.
-- **Indexing vektor** untuk pencarian kemiripan (plagiarisme) berbasis embedding.
-- **Penilaian otomatis** inovasi berdasarkan komponen penilaian yang dapat dikonfigurasi.
-- **Fitur chat dan analitik** untuk diskusi dan insight inovasi.
+---
 
-## Alur Proses
-1. **User login** (menggunakan header `X-Inovator`).
-2. **Upload dokumen inovasi** melalui endpoint `/innovations/`.
-3. Sistem akan:
-   - Menyimpan file PDF ke MinIO.
-   - Mengekstrak bagian penting dari PDF.
-   - Menyimpan metadata ke database.
-   - Membuat embedding vektor dan mengindeksnya.
-   - Melakukan similarity search (plagiarisme) terhadap dokumen lain.
-4. **Penilaian inovasi** dapat dilakukan melalui endpoint `/get_score` tanpa upload ulang file (file diambil dari MinIO).
-5. **Fitur lanjutan**: chat, summary, analytics, dsb.
+## Fitur Utama
+- **Upload PDF Inovasi**: User dapat mengunggah dokumen inovasi (PDF) yang akan diekstrak dan dianalisis otomatis.
+- **Ekstraksi Otomatis**: Sistem mengekstrak bagian penting (latar belakang, tujuan, deskripsi) dari PDF menggunakan model multimodal.
+- **Penyimpanan Aman**: File PDF disimpan di MinIO, metadata di PostgreSQL.
+- **Cek Kemiripan (Plagiarisme)**: Menggunakan vektor embedding dan LSA similarity untuk mendeteksi kemiripan antar dokumen.
+- **Penilaian Otomatis**: Skoring inovasi berdasarkan komponen yang dapat dikonfigurasi.
+- **Chatbot AI**: Chat interaktif dengan AI terkait inovasi, baik per dokumen maupun chatbot mengambang (floating chatbot) di dashboard.
+- **Analitik & Ringkasan**: Statistik chat, summary inovasi, dan insight lain.
+- **Dashboard Modern**: Frontend React (Vite) dengan sidebar menu, modal detail, PDF preview, toast notifikasi, dan responsif.
 
-## API Kontrak
+---
+
+## Arsitektur
+- **Backend**: FastAPI, async, endpoint modular, CORS, logging, MinIO, PostgreSQL, AI (Gemini, LangChain)
+- **Frontend**: React (Vite), modular, sidebar menu, floating chatbot, PDF preview, toast, dropdown, responsive CSS
+- **Storage**: MinIO (file), PostgreSQL (metadata)
+
+---
+
+## Cara Menjalankan (Local)
+
+### Backend (FastAPI)
+1. Pastikan Python 3.10+ terinstall
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Atur file `.env` sesuai kebutuhan (lihat contoh di repo)
+4. Jalankan backend:
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+### Frontend (React)
+1. Masuk ke folder `app/`
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Jalankan frontend:
+   ```bash
+   npm run dev
+   ```
+4. Buka browser ke [http://localhost:5173](http://localhost:5173)
+
+---
+
+## Struktur Folder
+
+- `main.py`            : FastAPI backend utama
+- `config/`            : Konfigurasi MinIO, Gemini, PostgreSQL
+- `module/`            : Modul AI, vektor, ekstraksi PDF
+- `app/`               : Frontend React (Vite)
+    - `index.tsx`      : Entry point React
+    - `index.css`      : Styling modern dashboard & chatbot
+    - `index.html`     : HTML utama
+    - `package.json`   : Dependensi frontend
+    - `README.md`      : Dokumentasi frontend
+- `uploads/`           : Folder upload file (otomatis dibuat)
+- `.env`               : Konfigurasi environment
+
+---
+
+## API Endpoint Utama
 
 ### 1. Upload Inovasi
 **POST** `/innovations/`
-
-#### Request
-- Form Data:
-  - `judul_inovasi`: string (required)
-  - `file`: PDF file (required)
-  - `table_name`: string (optional, default: "innovations")
-- Header:
-  - `X-Inovator`: string (required, nama user/inovator)
-
-#### Response
-```json
-{
-  "status": "success",
-  "table": "innovations",
-  "extracted_sections": {
-    "latar_belakang": "✓/✗",
-    "tujuan_inovasi": "✓/✗",
-    "deskripsi_inovasi": "✓/✗"
-  },
-  "lsa_similarity_results": [
-    {
-      "lsa_similarity": 0.85,
-      "link_document": "https://..."
-    },
-    ...
-  ],
-  "innovation_id": "judul_inovasi_nama_inovator"
-}
-```
+- Form Data: `judul_inovasi` (string, required), `file` (PDF), `table_name` (optional)
+- Header: `X-Inovator`
+- Response: `{ "status": "success", "innovation_id": "..." }`
 
 ### 2. Penilaian Inovasi
 **POST** `/get_score`
-
-#### Request
-- Form Data:
-  - `id`: string (required, id inovasi hasil upload)
-  - `table_name`: string (optional, default: "innovations")
-- Header:
-  - `X-Inovator`: string (required)
-
-#### Response
-```json
-{
-  "substansi_orisinalitas": 12,
-  "substansi_urgensi": 8,
-  "substansi_kedalaman": 13,
-  "analisis_dampak": 14,
-  "analisis_kelayakan": 9,
-  "analisis_data": 8,
-  "sistematika_struktur": 9,
-  "sistematika_bahasa": 8,
-  "sistematika_referensi": 4,
-  "total": 85
-}
-```
-### 3. LSA Similarity Results
-**GET** `/innovations/{innovation_id}/lsa_results`
-- Mendapatkan hasil similarity LSA untuk inovasi tertentu.
-
-### 4. Ringkasan AI Inovasi
-**GET** `/innovations/{innovation_id}/summary`
-- Mendapatkan ringkasan AI untuk inovasi tertentu.
-
-### 5. Chat Tentang Inovasi
-**POST** `/innovations/{innovation_id}/chat`
-- Form Data: `question` (string, required)
+- Form Data: `id` (innovation_id)
 - Header: `X-Inovator`
-- Response: `{ "answer": "..." }`
+- Response: skor per komponen & total
 
-### 6. Riwayat Chat Inovasi
-**GET** `/innovations/{innovation_id}/chat_history`
-- Query: `limit` (int, default 50)
+### 3. LSA Similarity
+**GET** `/innovations/{id}/lsa_results`
+
+### 4. Ringkasan AI
+**GET** `/innovations/{id}/summary`
+
+### 5. Chat Inovasi
+**POST** `/innovations/{id}/chat`
+- Form Data: `question`
 - Header: `X-Inovator`
-- Response: daftar chat
+
+### 6. Riwayat Chat
+**GET** `/innovations/{id}/chat_history`
 
 ### 7. Ringkasan Chat User
 **GET** `/users/{user_name}/chat_summary`
-- Header: `X-Inovator`
-- Response: ringkasan chat user
 
 ### 8. Cari Chat
 **POST** `/chat/search`
-- Form Data: `search_query` (string, required), `innovation_id` (optional)
-- Header: `X-Inovator`
-- Response: hasil pencarian chat
 
-### 9. Hapus Riwayat Chat Inovasi
-**DELETE** `/innovations/{innovation_id}/chat_history`
-- Header: `X-Inovator`
-- Response: status
+### 9. Analitik Chat
+**GET** `/innovations/{id}/chat_analytics`
 
-### 10. Analitik Chat Inovasi
-**GET** `/innovations/{innovation_id}/chat_analytics`
+### 10. Daftar Inovasi User
+**GET** `/innovations/by_inovator`
 - Header: `X-Inovator`
-- Response: analitik chat
 
 ---
 
-## Komponen Penilaian (dari .env)
-- Substansi & Gagasan Inovasi (Orisinalitas, Urgensi, Kedalaman)
-- Analisis, Potensi, & Kelayakan (Dampak, Kelayakan, Data)
-- Sistematika & Kualitas Penulisan (Struktur, Bahasa, Referensi)
-
-## Teknologi
-- FastAPI, PostgreSQL, MinIO, LangChain, Google Vertex AI Gemini, pgvector, scikit-learn
+## Konfigurasi Lingkungan (`.env`)
+Lihat file `.env` untuk contoh variabel yang diperlukan (MinIO, Gemini, PostgreSQL, skor, dsb).
 
 ---
 
-**Catatan:**
-- File PDF tidak perlu diupload ulang untuk penilaian, cukup gunakan id inovasi.
-- Penilaian dan similarity search dilakukan otomatis setelah upload.
-- Endpoint chat, summary, analytics, dsb. tersedia untuk fitur lanjutan.
+## Catatan
+- Semua endpoint backend sudah mendukung CORS dan debug logging.
+- Frontend sudah mendukung upload, list, detail, scoring, chat, analytics, floating chatbot, dan notifikasi.
+- Untuk pengembangan/production, pastikan variabel `.env` sudah diatur dan MinIO/PostgreSQL sudah berjalan.
+
+---
+
+## Kontributor
+- Mohamad Alfie
+
+---
+
