@@ -1,9 +1,224 @@
 ./ai-innovation-checker
 ├── __pycache__
-│   └── main.cpython-311.pyc
+│   ├── main.cpython-311.pyc
+│   └── test_main.cpython-311-pytest-8.4.1.pyc
+├── .coverage
 ├── .env
+├── .git
+│   ├── COMMIT_EDITMSG
+│   ├── config
+│   ├── description
+│   ├── HEAD
+│   ├── hooks
+│   │   ├── applypatch-msg.sample
+│   │   ├── commit-msg.sample
+│   │   ├── fsmonitor-watchman.sample
+│   │   ├── post-update.sample
+│   │   ├── pre-applypatch.sample
+│   │   ├── pre-commit.sample
+│   │   ├── pre-merge-commit.sample
+│   │   ├── pre-push.sample
+│   │   ├── pre-rebase.sample
+│   │   ├── pre-receive.sample
+│   │   ├── prepare-commit-msg.sample
+│   │   ├── push-to-checkout.sample
+│   │   ├── sendemail-validate.sample
+│   │   └── update.sample
+│   ├── index
+│   ├── info
+│   │   └── exclude
+│   ├── logs
+│   │   ├── HEAD
+│   │   └── refs
+│   │       ├── heads
+│   │       │   └── main
+│   │       └── remotes
+│   │           └── origin
+│   ├── objects
+│   │   ├── 03
+│   │   │   └── 77c37606a7c5a33ccbd2176f4336ed1035b3b8
+│   │   ├── 05
+│   │   │   └── 1a536eb3d85e67fc0f6edd2f675901489e7fe0
+│   │   ├── 08
+│   │   │   └── d5725784b7a16c67137f957f203a66127d7402
+│   │   ├── 09
+│   │   │   └── 030cd2b249228f5c559098ec48b51dbbc97e43
+│   │   ├── 0a
+│   │   │   └── 2f360cca6a79fefed15e7f385ea7062844b035
+│   │   ├── 10
+│   │   │   └── c74e286aad2ff7637bcfad3f9539d898b79501
+│   │   ├── 11
+│   │   │   └── 61563fd64baa5317efa302d932743def9f3680
+│   │   ├── 13
+│   │   │   ├── 0d7c25fa11438bb2719818b6c0a01e934eb814
+│   │   │   └── d06cc356eab2c334e7ff63688d2a2a8a905912
+│   │   ├── 22
+│   │   │   └── 9a46393428291e9a98b4ec856073eb01004798
+│   │   ├── 25
+│   │   │   └── 62ab3c0236d89168807d4c1b6b8f7b6de0fd39
+│   │   ├── 27
+│   │   │   ├── 69fd421ac19b8051ade4120d62957925bdbe98
+│   │   │   └── 6e2f58cf15e539b7fec013f8444ccd5c0ecfce
+│   │   ├── 28
+│   │   │   ├── 9db1aa73964a7f6a54833a26dfb6edf5755de7
+│   │   │   └── dd8d162fe28f9c89f7aee989f3b0c352fe53b1
+│   │   ├── 2a
+│   │   │   └── 70a9ddb9ac372e45fd561a0e1f7f67a0190c58
+│   │   ├── 2c
+│   │   │   └── cf153059abe4254e4b9ac18a3fcfae2113fa07
+│   │   ├── 2e
+│   │   │   └── c1bcce4d044be66ef6f245ce7a623a1f0ffbd8
+│   │   ├── 32
+│   │   │   └── 45d36304146df753901141f832b5a522a84381
+│   │   ├── 33
+│   │   │   └── 86328c2b69016c0129e30fb73f8e468f7927bf
+│   │   ├── 35
+│   │   │   ├── ac8987152b3a9b55b4fe666c92995121d91cdb
+│   │   │   └── cbd9c32ba3384e557e7a2f2db0797fc2437ca7
+│   │   ├── 3a
+│   │   │   ├── 4226ab630358e32ece95e961f30ae44ca37047
+│   │   │   └── 86356a3b0585ea1b8cf515b7f07e80dbbceb0c
+│   │   ├── 3d
+│   │   │   └── 3f76e2713fbb46356d66bf926d1cbd6e0f2480
+│   │   ├── 42
+│   │   │   └── dae8f1a2fc1c257ead3d46ccc082fb7b09a0f8
+│   │   ├── 43
+│   │   │   └── 0522cd3fc26077710c99f5d8e5ea0f3dc49c1e
+│   │   ├── 4a
+│   │   │   └── 081f097ddc2195b529f539c55a270263c0555d
+│   │   ├── 4b
+│   │   │   ├── 32c40c4962b664b1f22ec000d7fa5cc3926595
+│   │   │   └── 69300907063b94ab80cc1148ed5713ff56eea4
+│   │   ├── 4d
+│   │   │   └── 4b2b7a29409f6198f88c4c2f9f96a71716f966
+│   │   ├── 53
+│   │   │   └── 120c33a69e5cf3f32bc9522802343c441259db
+│   │   ├── 54
+│   │   │   └── 3fbd9c404c4330d795ab1bc7fbf642277507b5
+│   │   ├── 59
+│   │   │   └── e6c8bb2f08a2c4abe746e74c2eb5f992401ba5
+│   │   ├── 5d
+│   │   │   └── e6934ae5dabe4f537897f0ebd1afd6e28f82cd
+│   │   ├── 60
+│   │   │   ├── 2b2c18a41f3396f8cf7731665faca2a3a585cc
+│   │   │   └── e2a1d30aa33f993a56b8bb9a85f376b806448b
+│   │   ├── 67
+│   │   │   ├── 4fd8c863a50aa5b72095d6ed92e757acb82335
+│   │   │   └── 8155e8d4872569ac47e5ff8ab759f0b8ab7006
+│   │   ├── 69
+│   │   │   └── 741e8a7abac9848ae76e7150c3fd628e37a84c
+│   │   ├── 6c
+│   │   │   └── 65a613d3b63b01fe34edf056d40013ce9ff9d3
+│   │   ├── 6e
+│   │   │   └── 30cf166aad3bccc94357f753d99fa313a296c5
+│   │   ├── 6f
+│   │   │   └── 50739e484f70886b289b0634bbc03bc624e1f5
+│   │   ├── 72
+│   │   │   └── 222fe043a77a3dbee404e3397e1eb8ce6e11df
+│   │   ├── 73
+│   │   │   └── e2d43cd9d5ce0930d4f53e5520167cd9223f38
+│   │   ├── 76
+│   │   │   ├── 4383a5086a2563dafc4f70dde79f87c567d0e5
+│   │   │   └── 94215c6a519e3d2c2d0cd0313044c25e5f2be2
+│   │   ├── 7c
+│   │   │   ├── 6b0cbb64aa9d4ad8c045c98a9dd5855f6dab54
+│   │   │   └── fd54022533572f1a17a52bd48f60cd1d0559d8
+│   │   ├── 85
+│   │   │   └── 78e0d808d72c08fc16a684327aeb95c35b7add
+│   │   ├── 8c
+│   │   │   └── 8e20948f92d19f9778ff321dab47adc71b2ae6
+│   │   ├── 8d
+│   │   │   └── b0d42b59cbc43eaa7bf89b3a739ae2a3958f1e
+│   │   ├── 8f
+│   │   │   └── c814456350c9963bffd9022c80292af5cafddd
+│   │   ├── 91
+│   │   │   └── 44670fd1b965bee26d24a27503109cb9ec6843
+│   │   ├── 95
+│   │   │   ├── 5ec785d11e1dec8236d9cd99a89ecad83dfef3
+│   │   │   └── f40bbe998fe3dd5a92c458e26979b02606104d
+│   │   ├── 98
+│   │   │   └── 0af20039d6207eb4279c7d78d2775d38eda635
+│   │   ├── 9f
+│   │   │   ├── 17f6919cfaf59c4ae9b1e28fb600702cf063a8
+│   │   │   └── 6122c0970b9a81c00de792d23b55e616574e28
+│   │   ├── a1
+│   │   │   └── 331a2e267eba7d340ef1f1edada18ae111e756
+│   │   ├── a6
+│   │   │   └── 738c9c49cc5349f7b4f2bd80a9a27d4e209d3a
+│   │   ├── aa
+│   │   │   └── fe0d689800f5740597419469efdbe19f63d9d9
+│   │   ├── b0
+│   │   │   └── 72a79ecb021f4f635c7aefeda20dd7878fbf0b
+│   │   ├── b1
+│   │   │   └── a69bd1318559c1687b6ed4c9814cc42cac281f
+│   │   ├── b2
+│   │   │   └── 895a1b4f5d6ec886524d5c1a8ee52d5ebce71e
+│   │   ├── b9
+│   │   │   └── b35cc2bcf74b392d17008e2c3e4c4dc6730a66
+│   │   ├── ba
+│   │   │   └── fbf4445a32510cceae19e0b2d12346fa38c9d5
+│   │   ├── bd
+│   │   │   └── 074540480f8598877c1fc6c639f391e6c051bf
+│   │   ├── c4
+│   │   │   └── cced3ce30102bffeeef53f3e0a72ae1cb78523
+│   │   ├── c6
+│   │   │   ├── 95dfd6af26de4f7d61d41f82a09a13ad4d6ae8
+│   │   │   └── ea564b2b69892ee34f2350bd34b74a5aba917a
+│   │   ├── cd
+│   │   │   ├── 30cb3b3002503edb8b8f397af9816e987b98cf
+│   │   │   └── a4555a738b9f6debf9716dda1315547ce44328
+│   │   ├── cf
+│   │   │   └── e134790bd4b2de8dcd966e873d800cd51e746d
+│   │   ├── d0
+│   │   │   └── 4560443ecec2041beed4f4b21af62a9b722ca9
+│   │   ├── d3
+│   │   │   └── e824c0313ce55779b72b82e91f1c70570ee168
+│   │   ├── d8
+│   │   │   └── d46aabf5f1404c268cabe355749043670df160
+│   │   ├── db
+│   │   │   ├── 4c5e85c0f3c3c1efe587d676d77b5fe473fd52
+│   │   │   └── fd11cc78ef756b1261dd41e3ac7051b9d8f169
+│   │   ├── df
+│   │   │   └── cbd78abc9eadde4526ae6a33108f97e4045540
+│   │   ├── e0
+│   │   │   └── 1275542e1b70574f2f5a60290decbb2d5ed7c7
+│   │   ├── e1
+│   │   │   └── 847d21944332554976bfdbe20cbe10f98823ce
+│   │   ├── e3
+│   │   │   ├── 4a15543b80bbfe903b07efd523bcb7127273b9
+│   │   │   └── fdaa8aa212c839687b054fba047847dce054bb
+│   │   ├── e7
+│   │   │   └── 07f5cff9bd09289578af6bb51980186998599c
+│   │   ├── e9
+│   │   │   └── 43f0227b1c11a7180d03fc7215ad65fdd309fa
+│   │   ├── ed
+│   │   │   └── c0880ea494bebe188b152790771a8f0e2247b5
+│   │   ├── f1
+│   │   │   └── 8fc1858b95c98a94469977ac3161fc41297c3f
+│   │   ├── fa
+│   │   │   └── 7b2a606c6d8515f383d5f7d316da320c4f7a55
+│   │   ├── ff
+│   │   │   └── 4fbc399e1340834541682dcdc1c6d638a71785
+│   │   ├── info
+│   │   └── pack
+│   └── refs
+│       ├── heads
+│       │   └── main
+│       ├── remotes
+│       │   └── origin
+│       │       └── main
+│       └── tags
 ├── .gitignore
+├── .pytest_cache
+│   ├── .gitignore
+│   ├── CACHEDIR.TAG
+│   ├── README.md
+│   └── v
+│       └── cache
+│           ├── lastfailed
+│           └── nodeids
 ├── app
+│   ├── App.test.tsx
 │   ├── index.css
 │   ├── index.html
 │   ├── index.tsx
@@ -20,13 +235,15 @@
 │   │   ├── .vite
 │   │   │   └── deps
 │   │   │       ├── _metadata.json
-│   │   │       ├── chunk-VHW23IB5.js
-│   │   │       ├── chunk-VHW23IB5.js.map
+│   │   │       ├── chunk-2WHLTL63.js
+│   │   │       ├── chunk-2WHLTL63.js.map
 │   │   │       ├── package.json
 │   │   │       ├── react_jsx-dev-runtime.js
 │   │   │       ├── react_jsx-dev-runtime.js.map
 │   │   │       ├── react-dom_client.js
 │   │   │       ├── react-dom_client.js.map
+│   │   │       ├── react-icons_fa.js
+│   │   │       ├── react-icons_fa.js.map
 │   │   │       ├── react.js
 │   │   │       └── react.js.map
 │   │   ├── .vite-temp
@@ -132,6 +349,13 @@
 │   │   │   │   ├── types.js
 │   │   │   │   ├── utils.d.ts
 │   │   │   │   └── utils.js
+│   │   │   ├── LICENSE
+│   │   │   ├── package.json
+│   │   │   └── README.md
+│   │   ├── fsevents
+│   │   │   ├── fsevents.d.ts
+│   │   │   ├── fsevents.js
+│   │   │   ├── fsevents.node
 │   │   │   ├── LICENSE
 │   │   │   ├── package.json
 │   │   │   └── README.md
@@ -316,6 +540,182 @@
 │   │   │   ├── static.node.js
 │   │   │   ├── static.react-server.js
 │   │   │   └── test-utils.js
+│   │   ├── react-icons
+│   │   │   ├── ai
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── bi
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── bs
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── cg
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── ci
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── di
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── fa
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── fa6
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── fc
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── fi
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── gi
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── go
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── gr
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── hi
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── hi2
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── im
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── index.d.ts
+│   │   │   ├── index.js
+│   │   │   ├── index.mjs
+│   │   │   ├── io
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── io5
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── lia
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── lib
+│   │   │   │   ├── iconBase.d.ts
+│   │   │   │   ├── iconBase.js
+│   │   │   │   ├── iconBase.mjs
+│   │   │   │   ├── iconContext.d.ts
+│   │   │   │   ├── iconContext.js
+│   │   │   │   ├── iconContext.mjs
+│   │   │   │   ├── iconsManifest.d.ts
+│   │   │   │   ├── iconsManifest.js
+│   │   │   │   ├── iconsManifest.mjs
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── LICENSE
+│   │   │   ├── lu
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── md
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── package.json
+│   │   │   ├── pi
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── README.md
+│   │   │   ├── ri
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── rx
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── si
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── sl
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── tb
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── tfi
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── ti
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   ├── vsc
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   └── package.json
+│   │   │   └── wi
+│   │   │       ├── index.d.ts
+│   │   │       ├── index.js
+│   │   │       ├── index.mjs
+│   │   │       └── package.json
 │   │   ├── rollup
 │   │   │   ├── dist
 │   │   │   │   ├── bin
@@ -602,7 +1002,8 @@
 ├── README.md
 ├── requirements.txt
 ├── struktur.txt
+├── test_main.py
 ├── test.ipynb
 └── uploads
 
-157 directories, 602 files
+215 directories, 792 files
