@@ -2,10 +2,10 @@
 
 AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan melakukan pengecekan kemiripan (plagiarisme) dokumen inovasi berbasis PDF menggunakan teknologi AI (Google Vertex AI Gemini, LangChain, vektor database, MinIO, dan FastAPI). Sistem ini menyediakan dashboard interaktif, upload PDF, penilaian otomatis, chat AI, analitik, dan fitur chatbot mengambang.
 
-[![Build Status](https://github.com/your-username/ai-innovation-checker/workflows/CI/badge.svg)](https://github.com/your-username/ai-innovation-checker/actions)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=your-project-key&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=your-project-key)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=your-project-key&metric=coverage)](https://sonarcloud.io/summary/new_code?id=your-project-key)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=your-project-key&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=your-project-key)
+[![Build Status](https://github.com/alfiemohamad/ai-innovation-checker/workflows/CI/badge.svg)](https://github.com/alfiemohamad/ai-innovation-checker/actions)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=coverage)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
 
 ---
 

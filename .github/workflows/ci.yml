@@ -167,14 +167,7 @@ jobs:
     
     - name: Install frontend dependencies
       working-directory: ./app
-      run: |
-        # Check if package-lock.json exists
-        if [ -f package-lock.json ]; then
-          npm ci
-        else
-          npm install
-          npm install --package-lock-only
-        fi
+      run: npm ci
     
     - name: Run frontend linting
       working-directory: ./app
@@ -189,8 +182,8 @@ jobs:
     - name: Run frontend tests
       working-directory: ./app
       run: |
-        # Run tests with coverage - allow some failures for now
-        npm run test:coverage || echo "Some tests failed but continuing CI/CD process"
+        # Run tests with coverage
+        npm run test:coverage
       env:
         CI: true
     
@@ -341,7 +334,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        cd app && npm install
+        cd app && npm ci
     
     - name: Set up integration test environment
       run: |
