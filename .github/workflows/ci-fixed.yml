@@ -27,6 +27,21 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
+      
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ACCESS_KEY: testuser
+          MINIO_SECRET_KEY: testpass123
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+        ports:
+          - 9000:9000
+        volumes:
+          - minio-data:/data
 
     steps:
     - name: Checkout code
@@ -58,8 +73,8 @@ jobs:
         # Start MinIO in background
         docker run -d --name minio-server \
           -p 9000:9000 \
-          -e "MINIO_ROOT_USER=testuser" \
-          -e "MINIO_ROOT_PASSWORD=testpass123" \
+          -e "MINIO_ACCESS_KEY=testuser" \
+          -e "MINIO_SECRET_KEY=testpass123" \
           minio/minio server /data --console-address ":9001"
         
         # Wait for MinIO to be ready
@@ -82,9 +97,6 @@ jobs:
         echo "MINIO_SECURE=false" >> .env
         echo "APP_ENV=testing" >> .env
         echo "DEBUG=false" >> .env
-        echo "GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON={}" >> .env
-        echo "GEMINI_PROJECT=test-project" >> .env
-        echo "GEMINI_LOCATION=us-central1" >> .env
     
     - name: Wait for services
       run: |
@@ -129,9 +141,6 @@ jobs:
         MINIO_BUCKET_NAME: test-bucket
         MINIO_SECURE: false
         APP_ENV: testing
-        GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON: "{}"
-        GEMINI_PROJECT: test-project
-        GEMINI_LOCATION: us-central1
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4
@@ -360,8 +369,8 @@ jobs:
       run: |
         docker run -d --name minio-integration \
           -p 9000:9000 \
-          -e "MINIO_ROOT_USER=testuser" \
-          -e "MINIO_ROOT_PASSWORD=testpass123" \
+          -e "MINIO_ACCESS_KEY=testuser" \
+          -e "MINIO_SECRET_KEY=testpass123" \
           minio/minio server /data --console-address ":9001"
         
         # Wait for MinIO

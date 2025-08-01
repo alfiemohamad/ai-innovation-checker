@@ -6,12 +6,17 @@ import numpy as np
 import pandas as pd
 import json
 import time
+import logging
 from pgvector.asyncpg import register_vector
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_experimental.text_splitter import SemanticChunker
 from minio import Minio
+from google.oauth2 import service_account
 from config.config import SaGoogle, GeminiConfig, PgCredential, MinioConfig
 from module.multimodal_model import GeminiPDFExtractor
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 class PostgreDB:
     def __init__(self):
@@ -22,6 +27,10 @@ class PostgreDB:
         self.user = self.pg_cred.username
         self.db_name = self.pg_cred.database
         self.password_db = self.pg_cred.password
+
+        # Setup Google Cloud credentials
+        self.credentials = None
+        self.setup_google_credentials()
 
         # Initialize GeminiPDFExtractor (handles Vertex AI init)
         self.extractor = GeminiPDFExtractor()
@@ -41,6 +50,34 @@ class PostgreDB:
         self.base_url = minio_cfg.base_url.rstrip('/')
         if not self.minio_client.bucket_exists(self.bucket_name):
             self.minio_client.make_bucket(self.bucket_name)
+
+    def setup_google_credentials(self):
+        """Setup Google Cloud credentials for VertexAI services"""
+        try:
+            sa = SaGoogle()
+            
+            if sa.vertex and sa.vertex != '{}':
+                try:
+                    # Try to parse as JSON content first (for environment variable)
+                    json_content = json.loads(sa.vertex)
+                    self.credentials = service_account.Credentials.from_service_account_info(
+                        json_content,
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    logger.info("Loaded Google Cloud credentials from JSON content (environment variable)")
+                except json.JSONDecodeError:
+                    # If not JSON, treat as file path (for local development)
+                    self.credentials = service_account.Credentials.from_service_account_file(
+                        sa.vertex,  
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    logger.info("Loaded Google Cloud credentials from file path")
+            else:
+                logger.warning("No Google Cloud credentials found. VertexAI features may be limited.")
+                
+        except Exception as e:
+            logger.error(f"Failed to setup Google Cloud credentials: {e}")
+            self.credentials = None
 
     def retry_with_backoff(self, func, *args, retry_delay=5, backoff_factor=2, **kwargs):
         max_attempts = 10
@@ -268,7 +305,9 @@ class PostgreDB:
         vertex_embeddings = VertexAIEmbeddings(
             model_name="textembedding-gecko@003",
             location=self.vertex_location,
-            max_output_tokens=768
+            max_output_tokens=768,
+            credentials=self.credentials,
+            project=self.vertex_project
         )
         text_splitter = SemanticChunker(vertex_embeddings)
         chunks = []
@@ -637,7 +676,9 @@ class PostgreDB:
         embeddings_service = VertexAIEmbeddings(
             model_name="textembedding-gecko@003",
             location=self.vertex_location,
-            max_output_tokens=768
+            max_output_tokens=768,
+            credentials=self.credentials,
+            project=self.vertex_project
         )
         qe = embeddings_service.embed_query(prompt.lower())
 

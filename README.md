@@ -135,16 +135,51 @@ MINIO_SECRET_KEY=your_secret_key
 MINIO_BUCKET_NAME=ai-innovation
 MINIO_SECURE=false
 
-# Google Cloud Vertex AI
-GOOGLE_APPLICATION_CREDENTIALS=config/key/vertex.json
-GOOGLE_CLOUD_PROJECT=your-project-id
-VERTEX_AI_LOCATION=us-central1
+# Google Cloud Vertex AI Configuration
+# Option 1: Use JSON file path (for local development)
+GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON=config/key/vertex.json
+
+# Option 2: Use JSON content directly (for CI/CD environments)
+# GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project",...}
+
+# Option 3: Disable Vertex AI for testing
+# GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON={}
+
+GEMINI_PROJECT=your-project-id
+GEMINI_LOCATION=us-central1
 
 # Application
 APP_ENV=development
 DEBUG=true
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
+
+#### Google Cloud Authentication Setup
+
+The application supports three authentication methods for Google Cloud Vertex AI:
+
+**Option 1: JSON File Path (Recommended for Local Development)**
+```env
+GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON=config/key/vertex.json
+```
+- Place your service account JSON file in `config/key/vertex.json`
+- Best for local development and testing with real credentials
+
+**Option 2: JSON Content as Environment Variable (Recommended for CI/CD)**
+```env
+GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"your-project","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}'
+```
+- Ideal for CI/CD pipelines and containerized deployments
+- Set as a repository secret in GitHub Actions
+- More secure as credentials are not stored as files
+
+**Option 3: Disable Vertex AI (For Testing)**
+```env
+GOOGLE_VERTEX_SERVICE_ACCOUNT_JSON={}
+```
+- Disables all Vertex AI features gracefully
+- Application will run without AI capabilities
+- Useful for testing infrastructure components
 
 #### Database Setup
 ```bash

@@ -1,12 +1,14 @@
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from google.oauth2 import service_account
+from google.auth import default
 from config.config import SaGoogle, GeminiConfig, PgCredential, MinioConfig
 import base64
 import logging
 from typing import Optional, Dict
 import json
 import re
+import pandas as pd
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -20,14 +22,31 @@ class GeminiPDFExtractor:
     def setup_gemini(self):
         """Setup Gemini with service account credentials"""
         try:
-            # Inisialisasi credentials Vertex AI
+            # Initialize credentials Vertex AI
             gemini_config = GeminiConfig()
             sa = SaGoogle()
             
-            credentials = service_account.Credentials.from_service_account_file(
-                sa.vertex,  
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
+            # Check if sa.vertex is a file path or JSON content
+            if sa.vertex and sa.vertex != '{}':
+                try:
+                    # Try to parse as JSON content first (for environment variable)
+                    json_content = json.loads(sa.vertex)
+                    credentials = service_account.Credentials.from_service_account_info(
+                        json_content,
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    logger.info("Loaded credentials from JSON content (environment variable)")
+                except json.JSONDecodeError:
+                    # If not JSON, treat as file path (for local development)
+                    credentials = service_account.Credentials.from_service_account_file(
+                        sa.vertex,  
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    logger.info("Loaded credentials from file path")
+            else:
+                # No credentials provided - skip Vertex AI initialization for testing
+                logger.warning("No Google Cloud credentials found. Vertex AI features will be disabled.")
+                return
             
             vertexai.init(
                 credentials=credentials,
@@ -215,7 +234,6 @@ class GeminiPDFExtractor:
 
     @staticmethod
     def build_inovasi_dataframe(local_path, judul_inovasi, x_inovator, extracted):
-        import pandas as pd
         return pd.DataFrame([{
             "pdf_path": str(local_path),
             "nama_inovasi": judul_inovasi.lower().replace(" ", "_"),
