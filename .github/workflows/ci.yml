@@ -33,10 +33,13 @@ jobs:
         env:
           MINIO_ROOT_USER: testuser
           MINIO_ROOT_PASSWORD: testpass123
-        options: --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
         ports:
           - 9000:9000
-        command: server /data
 
     steps:
     - name: Checkout code
@@ -338,9 +341,13 @@ jobs:
         env:
           MINIO_ROOT_USER: testuser
           MINIO_ROOT_PASSWORD: testpass123
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
         ports:
           - 9000:9000
-        command: server /data
 
     steps:
     - name: Checkout code
