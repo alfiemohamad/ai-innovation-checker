@@ -53,7 +53,8 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 
 ## Struktur Folder
 
-- `main.py`            : FastAPI backend utama
+- `main.py`            : Entry point FastAPI, hanya untuk inisialisasi dan register router
+- `routes/`            : Modular endpoint FastAPI (`innovation.py`, `chat.py`, `user.py`)
 - `config/`            : Konfigurasi MinIO, Gemini, PostgreSQL
 - `module/`            : Modul AI, vektor, ekstraksi PDF
 - `app/`               : Frontend React (Vite)
@@ -69,44 +70,12 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 
 ## API Endpoint Utama
 
-### 1. Upload Inovasi
-**POST** `/innovations/`
-- Form Data: `judul_inovasi` (string, required), `file` (PDF), `table_name` (optional)
-- Header: `X-Inovator`
-- Response: `{ "status": "success", "innovation_id": "..." }`
+Endpoint sudah dipisah modular:
+- `routes/innovation.py` : Upload, scoring, summary, LSA, daftar inovasi
+- `routes/chat.py`       : Chat inovasi, riwayat chat, analitik, pencarian chat
+- `routes/user.py`       : Register & login user
 
-### 2. Penilaian Inovasi
-**POST** `/get_score`
-- Form Data: `id` (innovation_id)
-- Header: `X-Inovator`
-- Response: skor per komponen & total
-
-### 3. LSA Similarity
-**GET** `/innovations/{id}/lsa_results`
-
-### 4. Ringkasan AI
-**GET** `/innovations/{id}/summary`
-
-### 5. Chat Inovasi
-**POST** `/innovations/{id}/chat`
-- Form Data: `question`
-- Header: `X-Inovator`
-
-### 6. Riwayat Chat
-**GET** `/innovations/{id}/chat_history`
-
-### 7. Ringkasan Chat User
-**GET** `/users/{user_name}/chat_summary`
-
-### 8. Cari Chat
-**POST** `/chat/search`
-
-### 9. Analitik Chat
-**GET** `/innovations/{id}/chat_analytics`
-
-### 10. Daftar Inovasi User
-**GET** `/innovations/by_inovator`
-- Header: `X-Inovator`
+Referensi endpoint tetap sama seperti sebelumnya, hanya struktur backend lebih modular dan maintainable.
 
 ---
 

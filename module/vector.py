@@ -190,7 +190,7 @@ class PostgreDB:
     ):
         # Copy dataframe & add UUID
         df = df.copy().fillna("")
-        df["id"] = [str(uuid.uuid4()) for _ in range(len(df))]
+        # df["id"] = [str(uuid.uuid4()) for _ in range(len(df))]
 
         # Upload PDFs to MinIO, extract sections, then delete local files
         df["bucket_name"] = self.bucket_name

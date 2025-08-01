@@ -16,6 +16,9 @@ from dotenv import load_dotenv
 import os
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
+from fastapi import FastAPI, Form, Header, HTTPException
+from fastapi.responses import JSONResponse
+import os, json, re
 
 # Load env variables
 load_dotenv()
@@ -273,6 +276,9 @@ async def upload_innovation(
         "innovation_id": df['id'].iloc[0]
     })
 
+
+
+
 @app.post("/get_score")
 async def get_score(
     id: str = Form(...),
@@ -284,121 +290,97 @@ async def get_score(
     File diambil dari MinIO, tidak upload ulang.
     Juga melakukan LSA similarity check dan menyimpan hasil ke database.
     """
-    # Get innovation data from database
+    # ----- Ambil data inovasi dari DB -----
     try:
         conn = await db.connect_to_db()
         row = await conn.fetchrow(
-            f"""SELECT link_document, nama_inovasi, nama_inovator, 
-                      latar_belakang, tujuan_inovasi, deskripsi_inovasi 
+            f"""SELECT link_document, nama_inovasi, nama_inovator, \
+                      latar_belakang, tujuan_inovasi, deskripsi_inovasi \
                FROM {table_name} WHERE id = $1""", 
             id
         )
-        if not row or not row["link_document"]:
-            await conn.close()
-            raise HTTPException(status_code=404, detail="Innovation not found or link_document missing")
-        
-        innovation_data = dict(row)
         await conn.close()
+        if not row or not row["link_document"]:
+            raise HTTPException(status_code=404, detail="Innovation not found or link_document missing")
+        innovation_data = dict(row)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get innovation data: {e}")
 
-    # Parse object name from link_document
+    # ----- Download PDF dari MinIO -----
     try:
         from urllib.parse import urlparse
         parsed = urlparse(innovation_data["link_document"])
-        object_path = parsed.path.lstrip("/")
-        parts = object_path.split("/", 1)
-        if len(parts) != 2:
-            raise Exception("Invalid link_document format")
-        bucket_name, object_name = parts
+        bucket_name, object_name = parsed.path.lstrip("/").split("/", 1)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse object name: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse object path: {e}")
 
-    # Download file from MinIO
     local_path = UPLOAD_DIR / f"{id}.pdf"
     try:
         db.minio_client.fget_object(bucket_name, object_name, str(local_path))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to download file from MinIO: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to download file: {e}")
 
-    # Get scoring using multimodal_model
+    # ----- Scoring model -----
     try:
         prompt = db.extractor.build_scoring_prompt()
         result = db.extractor.extract_with_custom_prompt(str(local_path), prompt)
         if result:
+            cleaned = result.replace("'", '"')
             try:
-                # Clean and parse JSON
-                cleaned_result = result.replace("'", '"')
-                score_json = json.loads(cleaned_result)
-                
-                # Save scoring results to database
-                if isinstance(score_json, dict) and "error" not in score_json:
-                    await db.save_scoring_results(id, score_json)
-                    
-            except Exception:
-                # Try to extract JSON from text
-                json_match = re.search(r'\{.*\}', result, re.DOTALL)
-                if json_match:
-                    try:
-                        score_json = json.loads(json_match.group().replace("'", '"'))
-                        # Save scoring results to database
-                        if isinstance(score_json, dict) and "error" not in score_json:
-                            await db.save_scoring_results(id, score_json)
-                    except:
-                        score_json = {"raw": result, "error": "Failed to parse scoring JSON"}
-                else:
-                    score_json = {"raw": result, "error": "No JSON found in response"}
+                score_json = json.loads(cleaned)
+            except:
+                match = re.search(r"\{.*\}", result, re.DOTALL)
+                score_json = json.loads(match.group().replace("'", '"')) if match else {"raw": result, "error": "Invalid JSON"}
+            if isinstance(score_json, dict) and "error" not in score_json:
+                await db.save_scoring_results(id, score_json)
         else:
             score_json = {"error": "No result from model"}
     except Exception as e:
         score_json = {"error": str(e)}
 
-    # Perform LSA similarity check
+    # ----- LSA Similarity Check -----
+    lsa_results = []
     try:
-        # Combine sections for query
-        query_text = f"{innovation_data['latar_belakang']} {innovation_data['tujuan_inovasi']} {innovation_data['deskripsi_inovasi']}"
-        
-        # Vector search for similar documents (excluding current document)
-        results = await db.similarity_search_plagiarisme(
-            query_text, 0.7, 10, table_name
+        query_text = (
+            f"{innovation_data['latar_belakang']} "
+            f"{innovation_data['tujuan_inovasi']} "
+            f"{innovation_data['deskripsi_inovasi']}"
         )
-        
-        lsa_results = []
-        if not isinstance(results, dict) or "message" not in results:
-            # Filter out the current document
-            filtered_results = [r for r in results if r.get('id') != id]
-            
-            # Prepare texts for LSA
-            doc_texts = [
+        raw_results = await db.similarity_search_plagiarisme(query_text, 0.7, 10, table_name)
+        candidates = [r for r in (raw_results if isinstance(raw_results, list) else []) if r.get('id') != id]
+        if candidates:
+            texts = [
                 f"{r['latar_belakang']} {r['tujuan_inovasi']} {r['deskripsi_inovasi']}"
-                for r in filtered_results
+                for r in candidates
             ]
-            
-            if doc_texts:
-                lsa_sim_matrix = lsa_similarity(query_text, doc_texts)
-                for i, r in enumerate(filtered_results):
-                    lsa_score = float(lsa_sim_matrix[0, i+1]) if lsa_sim_matrix.shape[0] > 1 else 0.0
-                    lsa_results.append({
-                        "similarity_score": round(lsa_score, 4),
-                        "link_document": r["link_document"],
-                        "nama_inovator": r.get("nama_inovator", "Unknown"),
-                        "compared_innovation_id": r.get("id", "Unknown")
-                    })
-        
-        # Save LSA results to database
+            sim_matrix = lsa_similarity(query_text, texts)
+            for idx, rec in enumerate(candidates):
+                score = float(sim_matrix[0, idx+1]) if sim_matrix.shape[0] > 1 else 0.0
+                lsa_results.append({
+                    "similarity_score": round(score, 4),
+                    "nama_inovasi": rec.get("nama_inovasi", "Unknown"),
+                    "nama_inovator": rec.get("nama_inovator", "Unknown"),
+                    "compared_innovation_description": rec.get("deskripsi_inovasi", "")
+                })
+        # Hapus duplikat berdasarkan nama_inovasi
+        unique = {item['nama_inovasi']: item for item in lsa_results}
+        lsa_results = list(unique.values())
         await db.save_lsa_results(id, lsa_results)
-        
     except Exception as e:
         logger.error(f"LSA similarity check failed: {e}")
-        lsa_results = []
 
-    # Clean up downloaded file
+    # ----- Hapus file lokal -----
     try:
         os.remove(local_path)
-    except Exception:
+    except:
         pass
 
-    # Prepare response with component scores and total
+    # ----- Siapkan response -----
+    # Hitung nilai tertinggi LSA
+    max_lsa = max((r['similarity_score'] for r in lsa_results), default=0)
+    detail_msg = f"LSA similarity score {max_lsa*100:.2f}% below 80% threshold"
+
+    # Response data dasar
     response_data = {
         "innovation_id": id,
         "nama_inovasi": innovation_data["nama_inovasi"],
@@ -406,20 +388,32 @@ async def get_score(
         "link_document": innovation_data["link_document"],
         "component_scores": {},
         "total_score": 0,
-        "plagiarism_check": lsa_results
+        # Placeholder plagiarism_check, akan diisi sesuai threshold
+        "plagiarism_check": None
     }
 
-    # Extract component scores if available
+    # Isi component_scores
     if isinstance(score_json, dict) and "error" not in score_json:
-        for component in INOVASI_SCORING.keys():
-            if component in score_json:
-                response_data["component_scores"][component] = score_json[component]
-        
+        for comp in INOVASI_SCORING.keys():
+            if comp in score_json:
+                response_data["component_scores"][comp] = score_json[comp]
         response_data["total_score"] = score_json.get("total", 0)
     else:
         response_data["scoring_error"] = score_json
 
+    # Tetapkan plagiarism_check
+    if max_lsa < 0.8:
+        # Hanya detail message
+        response_data["plagiarism_check"] = detail_msg
+        response_data["detail"] = detail_msg
+    else:
+        # Hasil LSA
+        response_data["plagiarism_check"] = lsa_results
+
     return JSONResponse(response_data)
+
+
+
 
 @app.get("/innovations/{innovation_id}/lsa_results")
 async def get_innovation_lsa_results(
@@ -570,6 +564,7 @@ async def chat_about_innovation(
         5. Gunakan bahasa Indonesia yang baik dan benar
         
         Jawab pertanyaan dengan format yang jelas dan terstruktur.
+        jika user minta meminta saran berikan saran yg relevan dengan inovasi ini.
         """
 
         # Get AI response using the PDF
