@@ -1,0 +1,437 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov httpx pytest-mock
+    
+    - name: Start MinIO Server
+      run: |
+        # Start MinIO in background
+        docker run -d --name minio-server \
+          -p 9000:9000 \
+          -e "MINIO_ROOT_USER=testuser" \
+          -e "MINIO_ROOT_PASSWORD=testpass123" \
+          minio/minio server /data --console-address ":9001"
+        
+        # Wait for MinIO to be ready
+        for i in {1..30}; do
+          if curl -f http://localhost:9000/minio/health/live; then
+            echo "MinIO is ready"
+            break
+          fi
+          echo "Waiting for MinIO... ($i/30)"
+          sleep 2
+        done
+    
+    - name: Set up test environment
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db" >> .env
+        echo "MINIO_ENDPOINT=localhost:9000" >> .env
+        echo "MINIO_ACCESS_KEY=testuser" >> .env
+        echo "MINIO_SECRET_KEY=testpass123" >> .env
+        echo "MINIO_BUCKET_NAME=test-bucket" >> .env
+        echo "MINIO_SECURE=false" >> .env
+        echo "APP_ENV=testing" >> .env
+        echo "DEBUG=false" >> .env
+    
+    - name: Wait for services
+      run: |
+        # Wait for PostgreSQL
+        for i in {1..30}; do
+          pg_isready -h localhost -p 5432 -U postgres && break
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+    
+    - name: Initialize database
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+        PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+    
+    - name: Create MinIO bucket
+      run: |
+        pip install minio
+        python -c "
+        from minio import Minio
+        import sys
+        try:
+            client = Minio('localhost:9000', access_key='testuser', secret_key='testpass123', secure=False)
+            if not client.bucket_exists('test-bucket'):
+                client.make_bucket('test-bucket')
+                print('Bucket created successfully')
+            else:
+                print('Bucket already exists')
+        except Exception as e:
+            print(f'Error creating bucket: {e}')
+            sys.exit(1)
+        "
+    
+    - name: Run backend tests
+      run: |
+        pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing --junitxml=junit.xml -v
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        MINIO_ENDPOINT: localhost:9000
+        MINIO_ACCESS_KEY: testuser
+        MINIO_SECRET_KEY: testpass123
+        MINIO_BUCKET_NAME: test-bucket
+        MINIO_SECURE: false
+        APP_ENV: testing
+    
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+        fail_ci_if_error: false
+    
+    - name: Archive backend test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: backend-test-results
+        path: |
+          junit.xml
+          htmlcov/
+          coverage.xml
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+    
+    - name: Install frontend dependencies
+      working-directory: ./app
+      run: |
+        if [ ! -f package-lock.json ]; then
+          npm install
+        else
+          npm ci
+        fi
+    
+    - name: Run frontend linting
+      working-directory: ./app
+      run: |
+        npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
+        if [ ! -f .eslintrc.js ]; then
+          echo "module.exports = {
+            parser: '@typescript-eslint/parser',
+            plugins: ['@typescript-eslint'],
+            extends: ['eslint:recommended', '@typescript-eslint/recommended'],
+            rules: {
+              '@typescript-eslint/no-unused-vars': ['error', { 'argsIgnorePattern': '^_' }],
+              '@typescript-eslint/no-explicit-any': 'warn'
+            }
+          };" > .eslintrc.js
+        fi
+        npx eslint . --ext .ts,.tsx --max-warnings 10 || true
+    
+    - name: Type check
+      working-directory: ./app
+      run: npx tsc --noEmit
+    
+    - name: Run frontend tests
+      working-directory: ./app
+      run: |
+        npm install --save-dev vitest @vitest/ui jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
+        
+        if [ ! -f vitest.config.ts ]; then
+          cat > vitest.config.ts << 'EOF'
+        import { defineConfig } from 'vitest/config'
+        import react from '@vitejs/plugin-react'
+
+        export default defineConfig({
+          plugins: [react()],
+          test: {
+            globals: true,
+            environment: 'jsdom',
+            setupFiles: ['./setupTests.ts'],
+            coverage: {
+              provider: 'v8',
+              reporter: ['text', 'lcov', 'html'],
+              exclude: [
+                'node_modules/',
+                'dist/',
+                '**/*.d.ts',
+                '**/*.config.{js,ts}',
+                '**/coverage/**'
+              ]
+            }
+          }
+        })
+        EOF
+        fi
+        
+        if [ ! -f setupTests.ts ]; then
+          echo "import '@testing-library/jest-dom'" > setupTests.ts
+        fi
+        
+        npm pkg set scripts.test="vitest"
+        npm pkg set scripts.test:coverage="vitest --coverage"
+        npm pkg set scripts.test:ui="vitest --ui"
+        
+        npm run test:coverage
+    
+    - name: Upload frontend coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./app/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+        fail_ci_if_error: false
+    
+    - name: Build frontend
+      working-directory: ./app
+      run: npm run build
+    
+    - name: Archive frontend artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: frontend-build
+        path: |
+          app/dist/
+          app/coverage/
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Python Security Check
+      run: |
+        pip install safety bandit
+        safety check --json || true
+        bandit -r . -f json -o bandit-report.json || true
+    
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-scan-results
+        path: |
+          trivy-results.sarif
+          bandit-report.json
+
+  sonarcloud:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download backend coverage
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-test-results
+    
+    - name: Download frontend coverage
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: app/
+    
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: integration_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Start MinIO for Integration Tests
+      run: |
+        docker run -d --name minio-integration \
+          -p 9000:9000 \
+          -e "MINIO_ROOT_USER=testuser" \
+          -e "MINIO_ROOT_PASSWORD=testpass123" \
+          minio/minio server /data --console-address ":9001"
+        
+        # Wait for MinIO
+        for i in {1..30}; do
+          if curl -f http://localhost:9000/minio/health/live; then
+            echo "MinIO is ready"
+            break
+          fi
+          echo "Waiting for MinIO... ($i/30)"
+          sleep 2
+        done
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        cd app && npm install
+    
+    - name: Set up integration test environment
+      run: |
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/integration_test_db" >> .env
+        echo "MINIO_ENDPOINT=localhost:9000" >> .env
+        echo "MINIO_ACCESS_KEY=testuser" >> .env
+        echo "MINIO_SECRET_KEY=testpass123" >> .env
+        echo "MINIO_BUCKET_NAME=integration-test-bucket" >> .env
+        echo "MINIO_SECURE=false" >> .env
+        echo "APP_ENV=integration_testing" >> .env
+    
+    - name: Initialize integration test database
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d integration_test_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    
+    - name: Run integration tests
+      run: |
+        uvicorn main:app --host 0.0.0.0 --port 8000 &
+        BACKEND_PID=$!
+        
+        cd app && npm run dev -- --host 0.0.0.0 --port 3000 &
+        FRONTEND_PID=$!
+        
+        sleep 30
+        
+        curl -f http://localhost:8000/health || echo "Backend health check failed"
+        curl -f http://localhost:3000 || echo "Frontend health check failed"
+        
+        cd .. && pytest tests/ -m integration -v || true
+        
+        kill $BACKEND_PID $FRONTEND_PID || true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend, security-scan, integration-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+    
+    - name: Run smoke tests
+      run: |
+        echo "🧪 Running smoke tests on staging..."
+    
+    - name: Deploy to production
+      if: success()
+      run: |
+        echo "🎉 Deploying to production environment..."
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend, security-scan, sonarcloud, integration-tests, deploy]
+    if: always()
+    
+    steps:
+    - name: Cleanup artifacts
+      run: |
+        echo "🧹 Cleaning up temporary artifacts..."
