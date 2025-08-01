@@ -6,10 +6,9 @@ import SidebarMenu from './components/SidebarMenu';
 import Spinner from './components/Spinner';
 import UserProfileModal from './components/UserProfileModal';
 import InnovationUploader from './components/InnovationUploader';
-import InnovationList from './components/InnovationList';
 import GetScoreMenu from './components/GetScoreMenu';
-import ChatSearchMenu from './components/ChatSearchMenu';
-import AnalyticsMenu from './components/AnalyticsMenu';
+import InnovationSearchMenu from './components/InnovationSearchMenu';
+import InnovationRankMenu from './components/InnovationRankMenu';
 import type { User, Innovation, Score, Summary, ChatMessage } from './types';
 
 // --- API HELPER FUNCTIONS ---
@@ -27,6 +26,66 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
         console.error(`API Error on ${endpoint}:`, error);
         throw error;
     }
+};
+
+// --- FILE MANAGEMENT FUNCTIONS ---
+const downloadedFiles = new Set<string>(); // Track downloaded blob URLs
+const downloadedFileBlobs = new Map<string, string>(); // Map original URL to blob URL
+
+const createPreviewUrl = async (minioUrl: string): Promise<string> => {
+    try {
+        // Check if we already have a blob URL for this MinIO URL
+        if (downloadedFileBlobs.has(minioUrl)) {
+            return downloadedFileBlobs.get(minioUrl)!;
+        }
+
+        // Download the file and create a blob URL
+        const response = await fetch(minioUrl);
+        if (!response.ok) {
+            throw new Error('Failed to fetch file from MinIO');
+        }
+        
+        // Check content length to avoid downloading huge files
+        const contentLength = response.headers.get('content-length');
+        if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB limit
+            throw new Error('File too large for preview (>50MB)');
+        }
+        
+        const blob = await response.blob();
+        
+        // Check if it's actually a PDF
+        if (!blob.type.includes('pdf') && !minioUrl.toLowerCase().includes('.pdf')) {
+            throw new Error('File does not appear to be a PDF');
+        }
+        
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Store the mapping and track the blob URL
+        downloadedFileBlobs.set(minioUrl, blobUrl);
+        downloadedFiles.add(blobUrl);
+        
+        console.log(`Created preview URL for: ${minioUrl}`);
+        return blobUrl;
+    } catch (error) {
+        console.error('Error creating preview URL:', error);
+        throw error;
+    }
+};
+
+const cleanupDownloadedFiles = () => {
+    const fileCount = downloadedFiles.size;
+    const urlCount = downloadedFileBlobs.size;
+    
+    // Revoke all blob URLs to free memory
+    downloadedFiles.forEach(blobUrl => {
+        URL.revokeObjectURL(blobUrl);
+    });
+    
+    // Clear the tracking sets/maps
+    downloadedFiles.clear();
+    downloadedFileBlobs.clear();
+    
+    console.log(`Cleaned up ${fileCount} blob URLs and ${urlCount} file mappings`);
 };
 
 
@@ -50,6 +109,77 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
 // --- Analytics Menu ---
 // (moved to ./components/AnalyticsMenu.tsx)
 
+// --- PDF PREVIEW COMPONENT ---
+const PDFPreview: FC<{ url: string, width?: string, height?: string, style?: React.CSSProperties }> = ({ 
+    url, 
+    width = "100%", 
+    height = "500px", 
+    style = {} 
+}) => {
+    const [previewUrl, setPreviewUrl] = useState<string>('');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const loadPreview = async () => {
+            if (!url) {
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+
+            try {
+                const blobUrl = await createPreviewUrl(url);
+                setPreviewUrl(blobUrl);
+            } catch (err: any) {
+                setError(err.message || 'Failed to load PDF preview');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadPreview();
+    }, [url]);
+
+    if (loading) {
+        return (
+            <div className="pdf-preview-loading" style={{ ...style, width, height, padding: '2rem', border: '1px solid #333', borderRadius: 8 }}>
+                <Spinner />
+                <p>Loading PDF preview...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="pdf-preview-error" style={{ ...style, width, height, padding: '2rem', border: '1px solid #333', borderRadius: 8 }}>
+                <p>⚠️ Error loading PDF</p>
+                <p>{error}</p>
+            </div>
+        );
+    }
+
+    if (!previewUrl) {
+        return (
+            <div style={{ ...style, width, height, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #333', borderRadius: 8 }}>
+                <p>No PDF preview available.</p>
+            </div>
+        );
+    }
+
+    return (
+        <iframe
+            src={previewUrl}
+            title="PDF Preview"
+            width={width}
+            height={height}
+            style={{ ...style, border: '1px solid #333', borderRadius: 8 }}
+        />
+    );
+};
+
 // --- Detail Modal ---
 interface DetailModalProps {
     user: User;
@@ -71,8 +201,10 @@ const DetailModal: FC<DetailModalProps> = ({ user, innovation, onClose }) => {
     const [error, setError] = useState<string | null>(null);
     
     const fetchDataForTab = useCallback(async (tab: Tab) => {
-        if (isLoading[tab]) return;
-        setIsLoading(prev => ({...prev, [tab]: true}));
+        setIsLoading(prev => {
+            if (prev[tab]) return prev; // Already loading, don't proceed
+            return {...prev, [tab]: true};
+        });
         setError(null);
         try {
             const headers = { 'X-Inovator': user.name };
@@ -105,7 +237,7 @@ const DetailModal: FC<DetailModalProps> = ({ user, innovation, onClose }) => {
         } finally {
             setIsLoading(prev => ({...prev, [tab]: false}));
         }
-    }, [user.name, innovation.innovation_id, score, summary, chatHistory, analytics, chatSummary, isLoading]);
+    }, [user.name, innovation.innovation_id, score, summary, chatHistory, analytics, chatSummary]);
 
     useEffect(() => {
         fetchDataForTab(activeTab);
@@ -148,17 +280,10 @@ const DetailModal: FC<DetailModalProps> = ({ user, innovation, onClose }) => {
                     <div>
                         <div style={{marginBottom: '1.5rem'}}>
                             <h3>Preview PDF</h3>
-                            {scoreResponse.link_document ? (
-                                <iframe
-                                    src={scoreResponse.link_document}
-                                    title="PDF Preview"
-                                    width="100%"
-                                    height="500px"
-                                    style={{border: '1px solid #333', borderRadius: 8}}
-                                />
-                            ) : (
-                                <p>No PDF preview available.</p>
-                            )}
+                            <PDFPreview 
+                                url={scoreResponse.link_document} 
+                                height="500px"
+                            />
                         </div>
                         <div className="score-grid">
                             {Object.entries(score).map(([key, value]) => (
@@ -170,12 +295,20 @@ const DetailModal: FC<DetailModalProps> = ({ user, innovation, onClose }) => {
                         </div>
                         <div style={{marginTop: '2rem'}}>
                             <h3>Plagiarism Check (LSA Similarity)</h3>
-                            {scoreResponse.plagiarism_check && scoreResponse.plagiarism_check.length > 0 ? (
+                            {scoreResponse.plagiarism_check && Array.isArray(scoreResponse.plagiarism_check) && scoreResponse.plagiarism_check.length > 0 ? (
                                 <ul>
                                     {scoreResponse.plagiarism_check.map((item: any, idx: number) => (
                                         <li key={idx} style={{marginBottom: 8}}>
                                             <strong>Score:</strong> {item.similarity_score} | <strong>By:</strong> {item.nama_inovator} <br/>
-                                            <a href={item.link_document} target="_blank" rel="noopener noreferrer">Preview Document</a>
+                                            <details style={{marginTop: 8}}>
+                                                <summary style={{cursor: 'pointer', color: 'var(--primary-color)'}}>Preview Document</summary>
+                                                <div style={{marginTop: 8}}>
+                                                    <PDFPreview 
+                                                        url={item.link_document} 
+                                                        height="300px"
+                                                    />
+                                                </div>
+                                            </details>
                                         </li>
                                     ))}
                                 </ul>
@@ -283,6 +416,11 @@ const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetai
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai', content: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
   useEffect(() => { setSelectedId(innovationIds[0] || ''); }, [innovationIds]);
 
   const sendChat = async (e: FormEvent) => {
@@ -309,6 +447,30 @@ const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetai
     }
   };
 
+  const handleSearchInovasi = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true);
+    setSearchError(null);
+    setSearchResults([]);
+    try {
+      const formData = new FormData();
+      formData.append('query', searchQuery);
+      formData.append('table_name', 'innovations');
+      const res = await apiRequest('/search_inovasi', {
+        method: 'POST',
+        headers: { 'X-Inovator': user.name },
+        body: formData
+      });
+      setSearchResults(res.results || []);
+      if (res.ai_explanation) setMessages(prev => [...prev, { role: 'ai', content: res.ai_explanation }]);
+    } catch (err: any) {
+      setSearchError(err.message);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   return (
     <>
       <div className={`floating-chatbot-btn${open ? ' open' : ''}`} onClick={() => setOpen(o => !o)} title="Open Chatbot">
@@ -316,7 +478,7 @@ const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetai
         {!open && <span>Chat</span>}
       </div>
       {open && (
-        <div className={`floating-chatbot-modal${maximized ? ' maximized' : ''}`}> {/* Add maximized class */}
+        <div className={`floating-chatbot-modal${maximized ? ' maximized' : ''}`}>
           <div className="floating-chatbot-header">
             <span>AI Innovation Chatbot</span>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -345,8 +507,9 @@ const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetai
               <div key={i} className={`chatbot-msg ${msg.role}`}>{msg.content}</div>
             ))}
             {loading && <div className="chatbot-msg ai">...</div>}
+          {error && <div className="error-message">{error}</div>}
           </div>
-          <form className="floating-chatbot-input" onSubmit={sendChat}>
+          <form className="floating-chatbot-input" onSubmit={sendChat} style={{marginBottom:8}}>
             <input
               type="text"
               value={question}
@@ -356,7 +519,31 @@ const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetai
             />
             <button type="submit" aria-label="Send Chat">Kirim</button>
           </form>
-          {error && <div className="error-message">{error}</div>}
+          <form onSubmit={handleSearchInovasi} style={{display:'flex',gap:8,marginBottom:8}}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Cari inovasi (keyword judul/deskripsi)"
+              disabled={searchLoading}
+            />
+            <button type="submit" aria-label="Cari" disabled={searchLoading}>Cari</button>
+          </form>
+          {searchLoading && <div className="chatbot-msg ai">Mencari inovasi...</div>}
+          {searchError && <div className="error-message">{searchError}</div>}
+          {searchResults.length > 0 && (
+            <div style={{maxHeight:120,overflowY:'auto',marginBottom:8}}>
+              <strong>Hasil Pencarian:</strong>
+              <ul>
+                {searchResults.map((item, i) => (
+                  <li key={i} style={{fontSize:13}}>
+                    <b>{item.nama_inovasi}</b> ({item.nama_inovator})<br/>
+                    <span>{item.deskripsi_inovasi?.slice(0,80)}...</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </>
@@ -372,13 +559,28 @@ const App = () => {
   const [selectedInnovation, setSelectedInnovation] = useState<Innovation | null>(null);
   const [showProfile, setShowProfile] = useState(false);
 
+  // Cleanup on page unload or component unmount
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      cleanupDownloadedFiles();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup on component unmount
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      cleanupDownloadedFiles();
+    };
+  }, []);
+
   // Fetch innovation IDs from backend after login
   useEffect(() => {
     const fetchInnovationIds = async () => {
       if (!user) return;
       try {
         const res = await apiRequest(`/innovations/by_inovator?table_name=innovations`, {
-          headers: { 'X-Inovator': user?.name || '' }
+          headers: { 'X-Inovator': user.name }
         });
         setInnovationIds(res.innovation_ids || []);
       } catch (err) {
@@ -387,67 +589,89 @@ const App = () => {
     };
 
     fetchInnovationIds();
-  }, [user]);
+  }, [user?.name]);
 
   // Fetch innovation details for the first ID by default
   useEffect(() => {
     const fetchInnovationDetails = async () => {
-      if (innovationIds.length === 0) return;
+      if (innovationIds.length === 0) {
+        setInnovationDetails([]);
+        return;
+      }
       try {
         const details = await Promise.all(
-          innovationIds.map(id => apiRequest(`/innovations/${id}`, {
+          innovationIds.map(id => apiRequest(`/innovations/${id}/summary`, {
             headers: { 'X-Inovator': user?.name || '' }
           }))
         );
         setInnovationDetails(details);
-        setSelectedInnovation(details[0] || null);
+        // Remove auto-selection to prevent automatic modal opening
+        // setSelectedInnovation(details[0] || null);
       } catch (err) {
+        setInnovationDetails([]);
+        setSelectedInnovation(null);
         console.error('Failed to fetch innovation details:', err);
       }
     };
-
     fetchInnovationDetails();
-  }, [innovationIds, user]);
+  }, [innovationIds, user?.name]);
 
   const handleUploadSuccess = (newInnovation: Innovation) => {
     setInnovationDetails(prev => [newInnovation, ...prev]);
-    setActiveMenu('my_innovations');
+    // Don't switch to my_innovations since we removed it
+    // Just show success message that upload was successful
   };
 
+  const handleLogout = () => {
+    // Clean up downloaded files before logging out
+    cleanupDownloadedFiles();
+    
+    // Reset user state
+    setUser(null);
+    setActiveMenu('upload');
+    setInnovationIds([]);
+    setInnovationDetails([]);
+    setSelectedInnovation(null);
+    setShowProfile(false);
+  };
+
+  // Show login/register if not logged in
+  if (!user) {
+    return <LoginPage onLogin={u => { setUser(u); setActiveMenu('upload'); }} />;
+  }
+
+  // Show modal detail if selectedInnovation ada
   return (
-    <div className="app-container">
-      {user === null ? (
-        <LoginPage onLogin={setUser} />
-      ) : (
-        <>
-          <SidebarMenu active={activeMenu} setActive={setActiveMenu} />
-          <div className="main-content">
-            <div className="header">
-              <h1>AI Innovation Dashboard</h1>
-              <div className="user-info" onClick={() => setShowProfile(true)} title="Profile">
-                <FaUserCircle size={24} />
-                <span>{user.name}</span>
-              </div>
-            </div>
-            <div className="content-area">
-              {activeMenu === 'upload' && <InnovationUploader user={user!} onUploadSuccess={handleUploadSuccess} />}
-              {activeMenu === 'my_innovations' && <InnovationList onSelect={setSelectedInnovation} innovationIds={innovationIds} setInnovationDetails={setInnovationDetails} />}
-              {activeMenu === 'get_score' && <GetScoreMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
-              {activeMenu === 'chat_search' && <ChatSearchMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
-              {activeMenu === 'analytics' && <AnalyticsMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
-              {activeMenu === 'score' && selectedInnovation && (
-                <DetailModal user={user} innovation={selectedInnovation} onClose={() => setSelectedInnovation(null)} />
-              )}
-            </div>
-          </div>
-          {showProfile && user && (
-            <UserProfileModal
-              user={user!}
-              onClose={() => setShowProfile(false)}
-            />
-          )}
-          <FloatingChatbot user={user} innovationIds={innovationIds} innovationDetails={innovationDetails} />
-        </>
+    <div className="main-layout">
+      <SidebarMenu active={activeMenu} setActive={setActiveMenu} onLogout={handleLogout} />
+      {selectedInnovation && (
+        <DetailModal user={user} innovation={selectedInnovation} onClose={() => setSelectedInnovation(null)} />
+      )}
+      <main className="main-content">
+        {activeMenu === 'upload' && (
+          <InnovationUploader 
+            user={user} 
+            onUploadSuccess={handleUploadSuccess}
+          />
+        )}
+        {activeMenu === 'get_score' && (
+          <GetScoreMenu user={user} innovationIds={innovationIds} innovationDetails={innovationDetails} />
+        )}
+        {activeMenu === 'innovation_search' && (
+          <InnovationSearchMenu user={user} />
+        )}
+        {activeMenu === 'ranking' && (
+          <InnovationRankMenu />
+        )}
+      </main>
+      {showProfile && user && (
+        <UserProfileModal
+          user={user}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
+      {user && (
+        <FloatingChatbot user={user} innovationIds={innovationIds} innovationDetails={innovationDetails} />
       )}
     </div>
   );

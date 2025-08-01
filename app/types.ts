@@ -13,6 +13,23 @@ export interface LsaSimilarityResult {
   link_document: string;
 }
 
+export interface AiSummary {
+  ringkasan_singkat: string;
+  masalah_yang_diatasi: string;
+  solusi_yang_ditawarkan: string;
+  potensi_manfaat: string;
+  keunikan_inovasi: string;
+}
+
+export interface UploadResponse {
+  status: string;
+  code: number;
+  table: string;
+  extracted_sections: ExtractedSections;
+  ai_summary: AiSummary;
+  innovation_id: string;
+}
+
 export interface Innovation {
   innovation_id: string;
   judul_inovasi: string;

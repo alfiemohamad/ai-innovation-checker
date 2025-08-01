@@ -1,0 +1,15 @@
+Sistem Smart Waste Management IoT
+
+LATAR BELAKANG:
+Indonesia menghadapi krisis pengelolaan sampah yang semakin memburuk di kota-kota besar. Penumpukan sampah dan sistem pengumpulan yang tidak efisien menyebabkan masalah lingkungan dan kesehatan masyarakat.
+
+TUJUAN INOVASI:
+Mengembangkan sistem pengelolaan sampah cerdas berbasis IoT untuk meningkatkan efisiensi pengumpulan sampah dan mengurangi dampak lingkungan.
+
+DESKRIPSI INOVASI:
+Sistem Smart Waste Management IoT menggunakan sensor-sensor untuk memantau tingkat kebersihan tempat sampah secara real-time. Sistem ini dilengkapi dengan:
+1. Smart bins dengan sensor ultrasonik untuk mendeteksi level sampah
+2. GPS tracker untuk pelacakan lokasi
+3. Dashboard monitoring untuk petugas kebersihan
+4. Aplikasi mobile untuk masyarakat
+5. Sistem notifikasi otomatis ketika tempat sampah penuh

@@ -39,9 +39,13 @@
 │   │       └── stash
 │   ├── objects
 │   │   ├── 03
-│   │   │   └── 77c37606a7c5a33ccbd2176f4336ed1035b3b8
+│   │   │   ├── 77c37606a7c5a33ccbd2176f4336ed1035b3b8
+│   │   │   └── cc76cea2c607dbd7278dbaf6c69ec4cd21e97c
+│   │   ├── 04
+│   │   │   └── 1c2ca1ae17ae9f9ff3771720a0f6b5304dc2c5
 │   │   ├── 05
-│   │   │   └── 1a536eb3d85e67fc0f6edd2f675901489e7fe0
+│   │   │   ├── 1a536eb3d85e67fc0f6edd2f675901489e7fe0
+│   │   │   └── d2b7371fd5c35663525711b75e4edc8f70f151
 │   │   ├── 07
 │   │   │   └── e362bfeabfd3768f6baf68a16bd55b20c92c45
 │   │   ├── 08
@@ -64,7 +68,8 @@
 │   │   ├── 22
 │   │   │   └── 9a46393428291e9a98b4ec856073eb01004798
 │   │   ├── 24
-│   │   │   └── 0fd3098d5dfba0517915311cef370971e1db29
+│   │   │   ├── 0fd3098d5dfba0517915311cef370971e1db29
+│   │   │   └── 44e20e215b2cfcd028702db9a55f546e78d6ee
 │   │   ├── 25
 │   │   │   └── 62ab3c0236d89168807d4c1b6b8f7b6de0fd39
 │   │   ├── 27
@@ -96,6 +101,11 @@
 │   │   │   └── 86356a3b0585ea1b8cf515b7f07e80dbbceb0c
 │   │   ├── 3d
 │   │   │   └── 3f76e2713fbb46356d66bf926d1cbd6e0f2480
+│   │   ├── 3e
+│   │   │   └── 897fee77da72537cd25b676730cd4d34af08f4
+│   │   ├── 3f
+│   │   │   ├── 13dbabb5ee2c62b7f83df98bda19e55c71ce85
+│   │   │   └── 369593d41e5e2435c756612fcefd6495059fad
 │   │   ├── 42
 │   │   │   └── dae8f1a2fc1c257ead3d46ccc082fb7b09a0f8
 │   │   ├── 43
@@ -115,7 +125,8 @@
 │   │   │   └── 562ffbe7cb03ef51bf283958d9d653e614c1d1
 │   │   ├── 54
 │   │   │   ├── 3fbd9c404c4330d795ab1bc7fbf642277507b5
-│   │   │   └── 4e04bc7e895e031cdb236c898adf3a20914952
+│   │   │   ├── 4e04bc7e895e031cdb236c898adf3a20914952
+│   │   │   └── ab86ea696caee772a567718fee30b4fb49617c
 │   │   ├── 57
 │   │   │   └── f91aa0a8f7b28f06d37be20051930b73ac6f47
 │   │   ├── 58
@@ -129,11 +140,15 @@
 │   │   ├── 60
 │   │   │   ├── 2b2c18a41f3396f8cf7731665faca2a3a585cc
 │   │   │   └── e2a1d30aa33f993a56b8bb9a85f376b806448b
+│   │   ├── 61
+│   │   │   └── d4a4a110218851788b5ee48896c9ca439b57af
 │   │   ├── 67
 │   │   │   ├── 4fd8c863a50aa5b72095d6ed92e757acb82335
 │   │   │   └── 8155e8d4872569ac47e5ff8ab759f0b8ab7006
 │   │   ├── 69
 │   │   │   └── 741e8a7abac9848ae76e7150c3fd628e37a84c
+│   │   ├── 6b
+│   │   │   └── 1fa12163cea9e0c5b6740524e21b1133b78cab
 │   │   ├── 6c
 │   │   │   └── 65a613d3b63b01fe34edf056d40013ce9ff9d3
 │   │   ├── 6e
@@ -156,11 +171,16 @@
 │   │   │   └── be1efb594b5e2f826420a1fce9ea556b5ff859
 │   │   ├── 85
 │   │   │   ├── 78e0d808d72c08fc16a684327aeb95c35b7add
+│   │   │   ├── a05d5b3a93e376c22e532f8b633cc1be1f90df
 │   │   │   └── be5fad56193df5079adfd2478e1f5d496597c1
 │   │   ├── 86
 │   │   │   └── 96d286c3859bdb35d7441bb5ad8134c2ab460d
 │   │   ├── 88
 │   │   │   └── adbfed86dc46950ea44c096fbd647286360fc9
+│   │   ├── 89
+│   │   │   └── 2ec564e8a0fbebf1c3222492848e4738f12eb3
+│   │   ├── 8b
+│   │   │   └── f39c3285f567e086aa3598f09f1d87334ddb75
 │   │   ├── 8c
 │   │   │   └── 8e20948f92d19f9778ff321dab47adc71b2ae6
 │   │   ├── 8d
@@ -183,6 +203,8 @@
 │   │   │   └── d3dbb471a932889ed8cab4145b3ad969160e1e
 │   │   ├── 9a
 │   │   │   └── e415d9e4436cc2e5b3b33373576c386de49600
+│   │   ├── 9c
+│   │   │   └── eac6f21b66c499513ee20afdbd2ef9168b6b30
 │   │   ├── 9f
 │   │   │   ├── 17f6919cfaf59c4ae9b1e28fb600702cf063a8
 │   │   │   └── 6122c0970b9a81c00de792d23b55e616574e28
@@ -194,7 +216,8 @@
 │   │   ├── a3
 │   │   │   └── ee47744f51b7080432a197206677b1838b5864
 │   │   ├── a5
-│   │   │   └── 189582fcbd7178d1b4412110a0697dc15a8220
+│   │   │   ├── 189582fcbd7178d1b4412110a0697dc15a8220
+│   │   │   └── 45f4608a458b0f7615a7bb8c638b4e121a36d3
 │   │   ├── a6
 │   │   │   └── 738c9c49cc5349f7b4f2bd80a9a27d4e209d3a
 │   │   ├── a8
@@ -208,7 +231,8 @@
 │   │   ├── af
 │   │   │   └── fc032ab82be51611128b2094b5f0fa00fed950
 │   │   ├── b0
-│   │   │   └── 72a79ecb021f4f635c7aefeda20dd7878fbf0b
+│   │   │   ├── 72a79ecb021f4f635c7aefeda20dd7878fbf0b
+│   │   │   └── c35bd709956073e9ccd7552a72b2f5ca76f294
 │   │   ├── b1
 │   │   │   └── a69bd1318559c1687b6ed4c9814cc42cac281f
 │   │   ├── b2
@@ -218,6 +242,7 @@
 │   │   ├── b9
 │   │   │   └── b35cc2bcf74b392d17008e2c3e4c4dc6730a66
 │   │   ├── ba
+│   │   │   ├── 94f9567695cf5381db5c615dde0576655d2068
 │   │   │   └── fbf4445a32510cceae19e0b2d12346fa38c9d5
 │   │   ├── bd
 │   │   │   └── 074540480f8598877c1fc6c639f391e6c051bf
@@ -228,6 +253,7 @@
 │   │   ├── c4
 │   │   │   └── cced3ce30102bffeeef53f3e0a72ae1cb78523
 │   │   ├── c6
+│   │   │   ├── 957b2231fb071b5408141864af208db90fab2d
 │   │   │   ├── 95dfd6af26de4f7d61d41f82a09a13ad4d6ae8
 │   │   │   └── ea564b2b69892ee34f2350bd34b74a5aba917a
 │   │   ├── cd
@@ -247,6 +273,8 @@
 │   │   ├── db
 │   │   │   ├── 4c5e85c0f3c3c1efe587d676d77b5fe473fd52
 │   │   │   └── fd11cc78ef756b1261dd41e3ac7051b9d8f169
+│   │   ├── dc
+│   │   │   └── 28f96fd2275f7964175b80af6dcbb007067aeb
 │   │   ├── df
 │   │   │   └── cbd78abc9eadde4526ae6a33108f97e4045540
 │   │   ├── e0
@@ -270,19 +298,25 @@
 │   │   │   └── 43f0227b1c11a7180d03fc7215ad65fdd309fa
 │   │   ├── ed
 │   │   │   └── c0880ea494bebe188b152790771a8f0e2247b5
+│   │   ├── f0
+│   │   │   └── e7d6de1b2724b13cd2626ec24996310bb36031
 │   │   ├── f1
 │   │   │   ├── 8fc1858b95c98a94469977ac3161fc41297c3f
 │   │   │   └── b6899af66778a77cb2b65c539e38266adccc15
+│   │   ├── f5
+│   │   │   └── d562edcdbdd1a0e500fbbd3fd060150fcd29a9
 │   │   ├── f7
 │   │   │   ├── 1dd97070dd79814c414df31d897cc289da7a3a
 │   │   │   └── 89ad15ccd75db1b359405e84d6fb6d239e4a5a
 │   │   ├── f9
+│   │   │   ├── 5ad3175129bd48892b6262551c14bbd344c51d
 │   │   │   └── eb0d38738462925e75863ba86aedcda6bdee9b
 │   │   ├── fa
 │   │   │   ├── 7b2a606c6d8515f383d5f7d316da320c4f7a55
 │   │   │   └── a449e44a3ffe4ed6893eed49c8b4a41ea14c6e
 │   │   ├── ff
-│   │   │   └── 4fbc399e1340834541682dcdc1c6d638a71785
+│   │   │   ├── 4fbc399e1340834541682dcdc1c6d638a71785
+│   │   │   └── abdd910a669d666a75b7627ed1259603830f2d
 │   │   ├── info
 │   │   └── pack
 │   ├── ORIG_HEAD
@@ -3658,6 +3692,10 @@
 │   └── vector.py
 ├── README.md
 ├── requirements.txt
+├── routes
+│   ├── chat.py
+│   ├── innovation.py
+│   └── user.py
 ├── struktur.txt
 ├── test_main.py
 ├── test.ipynb
@@ -3665,4 +3703,4 @@
     ├── 6337c870-df56-4ea4-8c2a-7ef59682f65b.pdf
     └── Sistem__Nusantara_Eco-Hub___Solusi_Cerdas_Pengelolaan_Sampah_Perkotaan_Berbasis_IoT,_AI,_dan_Gamifikasi.pdf
 
-596 directories, 3070 files
+608 directories, 3096 files
