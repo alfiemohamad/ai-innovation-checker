@@ -4,6 +4,8 @@ Ini adalah frontend modern untuk platform AI Innovation Checker. Dibangun dengan
 
 ---
 
+![Coverage Badge](https://img.shields.io/badge/coverage-%3E75%25-brightgreen)
+
 ## Fitur Utama
 - **Login User (Inovator)**
 - **Upload PDF Inovasi**
@@ -34,6 +36,23 @@ Ini adalah frontend modern untuk platform AI Innovation Checker. Dibangun dengan
 
 ---
 
+## Menjalankan Tes & Coverage
+
+Jalankan semua test dan lihat coverage:
+```bash
+npm run test -- --coverage
+```
+
+Target coverage minimal: **75%**
+
+Tips agar coverage tinggi:
+- Pastikan semua komponen utama (Login, Register, Sidebar, Upload, List, Get Score, Chatbot) punya test render dan interaksi.
+- Uji error handling (misal: login gagal, upload gagal, API error).
+- Uji state perubahan (misal: sidebar collapse, modal buka/tutup, form submit, loading state).
+- Uji tampilan hasil (misal: hasil skor, plagiarism, chat, analytics, dsb).
+
+---
+
 ## Struktur File
 
 - `index.tsx`   : Entry point React, semua komponen utama (dashboard, sidebar, modal, chatbot)
@@ -42,6 +61,7 @@ Ini adalah frontend modern untuk platform AI Innovation Checker. Dibangun dengan
 - `package.json`: Dependensi frontend
 - `tsconfig.json`: Konfigurasi TypeScript
 - `vite.config.ts`: Konfigurasi Vite
+- `App.test.tsx`: Test utama frontend (wajib coverage > 75%)
 
 ---
 
@@ -68,6 +88,7 @@ Ini adalah frontend modern untuk platform AI Innovation Checker. Dibangun dengan
 - Semua fitur utama backend sudah terintegrasi di frontend
 - Jika ingin menambah fitur, cukup tambahkan komponen baru di `index.tsx` dan styling di `index.css`
 - Untuk pengembangan, gunakan mode dev (`npm run dev`)
+- Untuk coverage maksimal, tambahkan test pada semua komponen dan skenario error/sukses.
 
 ---
 

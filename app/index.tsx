@@ -1,52 +1,16 @@
-import React, { useState, useEffect, useCallback, FC, FormEvent } from 'react';
+import { useState, useEffect, type FC, type FormEvent, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { FaUpload, FaList, FaChartBar, FaSearch, FaStar, FaUserCircle, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-
-// --- TYPE DEFINITIONS (based on API Spec) ---
-
-interface User {
-    name: string;
-}
-
-interface ExtractedSections {
-    latar_belakang?: '✓' | '✗';
-    tujuan_inovasi?: '✓' | '✗';
-    deskripsi_inovasi?: '✓' | '✗';
-}
-
-interface LsaSimilarityResult {
-    lsa_similarity: number;
-    link_document: string;
-}
-
-interface Innovation {
-    innovation_id: string;
-    judul_inovasi: string;
-    extracted_sections: ExtractedSections;
-    lsa_similarity_results: LsaSimilarityResult[];
-}
-
-interface Score {
-    substansi_orisinalitas: number;
-    substansi_urgensi: number;
-    substansi_kedalaman: number;
-    analisis_dampak: number;
-    analisis_kelayakan: number;
-    analisis_data: number;
-    sistematika_struktur: number;
-    sistematika_bahasa: number;
-    sistematika_referensi: number;
-    total: number;
-}
-
-interface Summary {
-    summary: string;
-}
-
-interface ChatMessage {
-    role: 'user' | 'ai';
-    content: string;
-}
+import { FaUserCircle } from 'react-icons/fa';
+import LoginPage from './components/LoginPage';
+import SidebarMenu from './components/SidebarMenu';
+import Spinner from './components/Spinner';
+import UserProfileModal from './components/UserProfileModal';
+import InnovationUploader from './components/InnovationUploader';
+import InnovationList from './components/InnovationList';
+import GetScoreMenu from './components/GetScoreMenu';
+import ChatSearchMenu from './components/ChatSearchMenu';
+import AnalyticsMenu from './components/AnalyticsMenu';
+import type { User, Innovation, Score, Summary, ChatMessage } from './types';
 
 // --- API HELPER FUNCTIONS ---
 const API_BASE_URL = 'http://localhost:8000'; // Pastikan path endpoint backend benar
@@ -68,354 +32,23 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
 
 // --- UI COMPONENTS ---
 
-const Spinner: FC = () => <div className="spinner"></div>;
-
-
-interface LoginPageProps {
-    onLogin: (user: User) => void;
-}
-
-const LoginPage: FC<LoginPageProps> = ({ onLogin }) => {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState<string | null>(null);
-
-    const handleSubmit = (e: FormEvent) => {
-        e.preventDefault();
-        if (!username || !password) {
-            setError('Username and password are required.');
-            return;
-        }
-        setError(null);
-        // Simulate login, as no auth endpoint is specified.
-        // In a real app, you would call a login API here.
-        setTimeout(() => {
-            console.log(`Simulating login for user: ${username}`);
-            onLogin({ name: username });
-        }, 500);
-    };
-
-    return (
-        <div className="login-container">
-            <form className="login-form" onSubmit={handleSubmit}>
-                <h1>AI Innovation Checker</h1>
-                <div className="form-group">
-                    <label htmlFor="username">Username (Innovator Name)</label>
-                    <input
-                        type="text"
-                        id="username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        required
-                        aria-label="Username"
-                    />
-                </div>
-                <div className="form-group">
-                    <label htmlFor="password">Password</label>
-                    <input
-                        type="password"
-                        id="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        aria-label="Password"
-                    />
-                </div>
-                <button type="submit" style={{ width: '100%' }}>
-                    Login
-                </button>
-                {error && <p className="error-message">{error}</p>}
-            </form>
-        </div>
-    );
-};
-
-
 // --- Sidebar Menu ---
-const MENU = [
-  { key: 'upload', label: 'Upload Innovation', icon: <FaUpload /> },
-  { key: 'my_innovations', label: 'My Innovations', icon: <FaList /> },
-  { key: 'get_score', label: 'Get Score', icon: <FaStar /> },
-  { key: 'chat_search', label: 'Chat Search', icon: <FaSearch /> },
-  { key: 'analytics', label: 'Analytics', icon: <FaChartBar /> },
-];
-
-const SidebarMenu: FC<{ active: string, setActive: (k: string) => void }> = ({ active, setActive }) => {
-  const [collapsed, setCollapsed] = useState(false);
-  return (
-    <nav className={`sidebar-menu${collapsed ? ' collapsed' : ''}`}>  
-      <div className="sidebar-header">
-        <FaUserCircle size={32} style={{ marginRight: collapsed ? 0 : 12 }} />
-        {!collapsed && <span style={{ fontWeight: 600 }}>Menu</span>}
-        <button
-          className="sidebar-collapse-btn"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          onClick={() => setCollapsed(c => !c)}
-        >
-          {collapsed ? <FaChevronRight /> : <FaChevronLeft />}
-        </button>
-      </div>
-      <ul>
-        {MENU.map(m => (
-          <li key={m.key}>
-            <button
-              className={active === m.key ? 'active' : ''}
-              onClick={() => setActive(m.key)}
-              title={m.label}
-            >
-              <span className="sidebar-icon">{m.icon}</span>
-              {!collapsed && <span className="sidebar-label">{m.label}</span>}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-};
+// (removed local SidebarMenu definition)
 
 // --- Innovation Uploader ---
-const InnovationUploader: FC<{ user: User, onUploadSuccess: (innovation: Innovation) => void }> = ({ user, onUploadSuccess }) => {
-    const [title, setTitle] = useState('');
-    const [file, setFile] = useState<File | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<string | null>(null);
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
-        }
-    };
-
-    const handleSubmit = async (e: FormEvent) => {
-        e.preventDefault();
-        if (!title || !file) {
-            setError('Both title and a PDF file are required.');
-            return;
-        }
-        setError(null);
-        setSuccess(null);
-
-        const formData = new FormData();
-        formData.append('judul_inovasi', title);
-        formData.append('file', file);
-        
-        try {
-            const result = await apiRequest('/innovations/', {
-                method: 'POST',
-                headers: { 'X-Inovator': user.name },
-                body: formData,
-            });
-            onUploadSuccess(result);
-            setSuccess(`Innovation "${title}" uploaded successfully!`);
-            setTitle('');
-            setFile(null);
-            (document.getElementById('file-upload') as HTMLInputElement).value = '';
-        } catch (err: any) {
-            setError(err.message || 'Failed to upload innovation.');
-        }
-    };
-
-    return (
-        <div className="card">
-            <h2>Upload New Innovation</h2>
-            <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                    <label htmlFor="title">Innovation Title</label>
-                    <input
-                        type="text"
-                        id="title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="e.g., Smart Irrigation System"
-                    />
-                </div>
-                <div className="form-group">
-                    <label htmlFor="file-upload">PDF Document</label>
-                    <input
-                        type="file"
-                        id="file-upload"
-                        onChange={handleFileChange}
-                        accept=".pdf"
-                    />
-                </div>
-                <button type="submit" disabled={!title || !file}>
-                    Upload
-                    {/* {isLoading && <ButtonSpinner />} */}
-                </button>
-                {error && <p className="error-message">{error}</p>}
-                {success && <p className="success-message">{success}</p>}
-            </form>
-        </div>
-    );
-};
+// (moved to ./components/InnovationUploader.tsx)
 
 // --- Innovation List ---
-const InnovationList: FC<{ onSelect: (inv: Innovation) => void, innovationIds?: string[], setInnovationDetails?: (details: Innovation[]) => void }> = ({ onSelect, innovationIds, setInnovationDetails }) => {
-  const [innovationDetails, setLocalInnovationDetails] = useState<Innovation[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchDetails = async () => {
-      if (!innovationIds || innovationIds.length === 0) {
-        setLocalInnovationDetails([]);
-        if (setInnovationDetails) setInnovationDetails([]);
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        const details = await Promise.all(
-          innovationIds.map(async (id) => {
-            try {
-              return await apiRequest(`/innovations/${id}/summary`);
-            } catch {
-              return null;
-            }
-          })
-        );
-        const filtered = details.filter(Boolean);
-        setLocalInnovationDetails(filtered);
-        if (setInnovationDetails) setInnovationDetails(filtered);
-      } catch (err: any) {
-        setError('Failed to fetch innovation details.');
-        if (setInnovationDetails) setInnovationDetails([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDetails();
-  }, [innovationIds, setInnovationDetails]);
-
-  if (loading) return <div className="card"><h2>My Innovations</h2><Spinner /></div>;
-  if (error) return <div className="card"><h2>My Innovations</h2><p className="error-message">{error}</p></div>;
-
-  return (
-    <div className="card">
-      <h2>My Innovations</h2>
-      {innovationDetails.length === 0 ? (
-        <p>No innovations uploaded yet.</p>
-      ) : (
-        <ul>
-          {innovationDetails.map(inv => (
-            <li key={inv.innovation_id} className="innovation-item">
-              <span className="innovation-item-title">{inv.judul_inovasi || inv.innovation_id}</span>
-              <button onClick={() => onSelect(inv)}>View Details & Score</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-};
+// (moved to ./components/InnovationList.tsx)
 
 // --- Get Score Menu ---
-const GetScoreMenu: FC<{ user: User, innovationIds: string[], innovationDetails: Innovation[] }> = ({ user, innovationIds, innovationDetails }) => {
-  const [id, setId] = useState(innovationIds[0] || '');
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => { setId(innovationIds[0] || ''); }, [innovationIds]);
-  const handleGetScore = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null); setResult(null); setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('id', id);
-      const res = await apiRequest('/get_score', { method: 'POST', headers: { 'X-Inovator': user.name }, body: formData });
-      setResult(res);
-    } catch (err: any) {
-      setError(err.message);
-    } finally { setLoading(false); }
-  };
-  return (
-    <div className="card">
-      <h2>Get Score by Innovation ID</h2>
-      <form onSubmit={handleGetScore} style={{marginBottom: 16}}>
-        <select value={id} onChange={e => setId(e.target.value)} style={{marginRight: 8}}>
-          {innovationIds.map((iid, idx) => {
-            const found = innovationDetails.find(inv => inv.innovation_id === iid);
-            return <option key={iid} value={iid}>{found?.judul_inovasi || iid}</option>;
-          })}
-        </select>
-        <button type="submit" disabled={loading || !id}>{loading ? 'Loading...' : 'Get Score'}</button>
-      </form>
-      {error && <p className="error-message">{error}</p>}
-      {result && <pre style={{whiteSpace:'pre-wrap', background:'#222', color:'#fff', padding:8, borderRadius:4}}>{JSON.stringify(result, null, 2)}</pre>}
-    </div>
-  );
-};
+// (moved to ./components/GetScoreMenu.tsx)
 
 // --- Chat Search Menu ---
-const ChatSearchMenu: FC<{ user: User, innovationIds: string[], innovationDetails: Innovation[] }> = ({ user, innovationIds, innovationDetails }) => {
-  const [id, setId] = useState(innovationIds[0] || '');
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => { setId(innovationIds[0] || ''); }, [innovationIds]);
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault(); setError(null); setResults([]); setLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('search_query', query);
-      formData.append('innovation_id', id);
-      const res = await apiRequest('/chat/search', { method: 'POST', headers: { 'X-Inovator': user.name }, body: formData });
-      setResults(res.results || []);
-    } catch (err: any) { setError(err.message); } finally { setLoading(false); }
-  };
-  return (
-    <div className="card">
-      <h2>Search Chat</h2>
-      <form onSubmit={handleSearch} style={{marginBottom: 16}}>
-        <select value={id} onChange={e => setId(e.target.value)} style={{marginRight: 8}}>
-          {innovationIds.map(iid => {
-            const found = innovationDetails.find(inv => inv.innovation_id === iid);
-            return <option key={iid} value={iid}>{found?.judul_inovasi || iid}</option>;
-          })}
-        </select>
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search query" style={{marginRight: 8}} />
-        <button type="submit" disabled={loading || !query}>{loading ? 'Searching...' : 'Search'}</button>
-      </form>
-      {error && <p className="error-message">{error}</p>}
-      {results.length > 0 && (
-        <ul>{results.map((r, i) => <li key={i}><b>Q:</b> {r.user_question}<br/><b>A:</b> {r.ai_response}</li>)}</ul>
-      )}
-    </div>
-  );
-};
+// (moved to ./components/ChatSearchMenu.tsx)
 
 // --- Analytics Menu ---
-const AnalyticsMenu: FC<{ user: User, innovationIds: string[], innovationDetails: Innovation[] }> = ({ user, innovationIds, innovationDetails }) => {
-  const [id, setId] = useState(innovationIds[0] || '');
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => { setId(innovationIds[0] || ''); }, [innovationIds]);
-  const handleGetAnalytics = async (e: FormEvent) => {
-    e.preventDefault(); setError(null); setResult(null); setLoading(true);
-    try {
-      const res = await apiRequest(`/innovations/${id}/chat_analytics`, { headers: { 'X-Inovator': user.name } });
-      setResult(res);
-    } catch (err: any) { setError(err.message); } finally { setLoading(false); }
-  };
-  return (
-    <div className="card">
-      <h2>Chat Analytics by Innovation ID</h2>
-      <form onSubmit={handleGetAnalytics} style={{marginBottom: 16}}>
-        <select value={id} onChange={e => setId(e.target.value)} style={{marginRight: 8}}>
-          {innovationIds.map(iid => {
-            const found = innovationDetails.find(inv => inv.innovation_id === iid);
-            return <option key={iid} value={iid}>{found?.judul_inovasi || iid}</option>;
-          })}
-        </select>
-        <button type="submit" disabled={loading || !id}>{loading ? 'Loading...' : 'Get Analytics'}</button>
-      </form>
-      {error && <p className="error-message">{error}</p>}
-      {result && <pre style={{whiteSpace:'pre-wrap', background:'#222', color:'#fff', padding:8, borderRadius:4}}>{JSON.stringify(result, null, 2)}</pre>}
-    </div>
-  );
-};
+// (moved to ./components/AnalyticsMenu.tsx)
 
 // --- Detail Modal ---
 interface DetailModalProps {
@@ -641,20 +274,6 @@ const DetailModal: FC<DetailModalProps> = ({ user, innovation, onClose }) => {
     );
 };
 
-// --- User Profile/Settings Modal ---
-const UserProfileModal: FC<{ user: User, onClose: () => void }> = ({ user, onClose }) => (
-  <div className="modal-overlay" onClick={onClose}>
-    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
-      <button className="modal-close" onClick={onClose} aria-label="Close modal">&times;</button>
-      <div className="modal-header"><h2>User Profile</h2></div>
-      <div className="modal-body">
-        <p><strong>Name:</strong> {user.name}</p>
-        <p><em>More settings coming soon...</em></p>
-      </div>
-    </div>
-  </div>
-);
-
 // --- Floating Chatbot Component ---
 const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetails: Innovation[] }> = ({ user, innovationIds, innovationDetails }) => {
   const [open, setOpen] = useState(false);
@@ -735,7 +354,7 @@ const FloatingChatbot: FC<{ user: User, innovationIds: string[], innovationDetai
               placeholder="Tulis pertanyaan..."
               disabled={loading}
             />
-            <button type="submit" disabled={loading || !question.trim()}>Kirim</button>
+            <button type="submit" aria-label="Send Chat">Kirim</button>
           </form>
           {error && <div className="error-message">{error}</div>}
         </div>
@@ -759,59 +378,85 @@ const App = () => {
       if (!user) return;
       try {
         const res = await apiRequest(`/innovations/by_inovator?table_name=innovations`, {
-          headers: { 'X-Inovator': user.name }
+          headers: { 'X-Inovator': user?.name || '' }
         });
         setInnovationIds(res.innovation_ids || []);
-        // Optionally: fetch full innovation data for each ID here if needed
       } catch (err) {
-        setInnovationIds([]);
+        console.error('Failed to fetch innovation IDs:', err);
       }
     };
+
     fetchInnovationIds();
   }, [user]);
 
+  // Fetch innovation details for the first ID by default
   useEffect(() => {
-    if (user) localStorage.setItem(`innovations_${user.name}`, JSON.stringify(innovationDetails));
-  }, [innovationDetails, user]);
+    const fetchInnovationDetails = async () => {
+      if (innovationIds.length === 0) return;
+      try {
+        const details = await Promise.all(
+          innovationIds.map(id => apiRequest(`/innovations/${id}`, {
+            headers: { 'X-Inovator': user?.name || '' }
+          }))
+        );
+        setInnovationDetails(details);
+        setSelectedInnovation(details[0] || null);
+      } catch (err) {
+        console.error('Failed to fetch innovation details:', err);
+      }
+    };
+
+    fetchInnovationDetails();
+  }, [innovationIds, user]);
 
   const handleUploadSuccess = (newInnovation: Innovation) => {
     setInnovationDetails(prev => [newInnovation, ...prev]);
     setActiveMenu('my_innovations');
   };
 
-  if (!user) return <LoginPage onLogin={setUser} />;
-
   return (
-    <div className="main-layout">
-      <SidebarMenu active={activeMenu} setActive={setActiveMenu} />
-      <div className="main-content">
-        <div className="dashboard-header">
-          <h1>Dashboard</h1>
-          <div className="user-info">
-            <span>Welcome, {user?.name}</span>
-            <button onClick={() => setShowProfile(true)} className="profile-btn" title="Profile"><FaUserCircle size={22} /></button>
-            <button onClick={() => setUser(null)} className="secondary">Logout</button>
+    <div className="app-container">
+      {user === null ? (
+        <LoginPage onLogin={setUser} />
+      ) : (
+        <>
+          <SidebarMenu active={activeMenu} setActive={setActiveMenu} />
+          <div className="main-content">
+            <div className="header">
+              <h1>AI Innovation Dashboard</h1>
+              <div className="user-info" onClick={() => setShowProfile(true)} title="Profile">
+                <FaUserCircle size={24} />
+                <span>{user.name}</span>
+              </div>
+            </div>
+            <div className="content-area">
+              {activeMenu === 'upload' && <InnovationUploader user={user!} onUploadSuccess={handleUploadSuccess} />}
+              {activeMenu === 'my_innovations' && <InnovationList onSelect={setSelectedInnovation} innovationIds={innovationIds} setInnovationDetails={setInnovationDetails} />}
+              {activeMenu === 'get_score' && <GetScoreMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
+              {activeMenu === 'chat_search' && <ChatSearchMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
+              {activeMenu === 'analytics' && <AnalyticsMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
+              {activeMenu === 'score' && selectedInnovation && (
+                <DetailModal user={user} innovation={selectedInnovation} onClose={() => setSelectedInnovation(null)} />
+              )}
+            </div>
           </div>
-        </div>
-        {activeMenu === 'upload' && <InnovationUploader user={user!} onUploadSuccess={() => {}} />}
-        {activeMenu === 'my_innovations' && <InnovationList onSelect={setSelectedInnovation} innovationIds={innovationIds} setInnovationDetails={setInnovationDetails} />}
-        {activeMenu === 'get_score' && <GetScoreMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
-        {activeMenu === 'chat_search' && <ChatSearchMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
-        {activeMenu === 'analytics' && <AnalyticsMenu user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />}
-        {selectedInnovation && (
-          <DetailModal user={user!} innovation={selectedInnovation} onClose={() => setSelectedInnovation(null)} />
-        )}
-        {showProfile && <UserProfileModal user={user!} onClose={() => setShowProfile(false)} />}
-        <FloatingChatbot user={user!} innovationIds={innovationIds} innovationDetails={innovationDetails} />
-      </div>
+          {showProfile && user && (
+            <UserProfileModal
+              user={user!}
+              onClose={() => setShowProfile(false)}
+            />
+          )}
+          <FloatingChatbot user={user} innovationIds={innovationIds} innovationDetails={innovationDetails} />
+        </>
+      )}
     </div>
   );
 };
 
 const container = document.getElementById('root');
 if (container) {
-  const root = createRoot(container);
-  root.render(<App />);
+    const root = createRoot(container);
+    root.render(<App />);
 }
 
 export default App;
