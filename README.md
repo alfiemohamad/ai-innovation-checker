@@ -7,6 +7,7 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=coverage)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
 [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
 [![Frontend Tests](https://img.shields.io/badge/frontend%20tests-16%2F16%20passing-brightgreen)](https://github.com/alfiemohamad/ai-innovation-checker/actions)
+[![codecov](https://codecov.io/github/alfiemohamad/ai-innovation-checker/graph/badge.svg?token=3USHDAY97N)](https://codecov.io/github/alfiemohamad/ai-innovation-checker)
 
 ---
 
@@ -534,6 +535,25 @@ pytest -v
 pytest -m integration
 ```
 
+#### Backend Test Coverage
+- **Coverage Reports**: Auto-generated dengan pytest-cov
+- **HTML Reports**: Available di `htmlcov/index.html` setelah run dengan `--cov-report=html`
+- **CI Integration**: Coverage dikirim ke Codecov untuk tracking dan badges
+- **Target Coverage**: Minimum 75% untuk production-ready code
+
+#### Coverage Commands
+```bash
+# Generate coverage report
+pytest --cov=. --cov-report=term-missing --cov-report=html --cov-report=xml
+
+# View coverage dalam terminal
+pytest --cov=. --cov-report=term
+
+# Open HTML coverage report (setelah generate)
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+```
+
 #### Test Examples
 ```python
 # tests/test_innovation.py
@@ -760,7 +780,6 @@ jobs:
         echo "MINIO_ACCESS_KEY=testuser" >> .env
         echo "MINIO_SECRET_KEY=testpass123" >> .env
         echo "MINIO_BUCKET_NAME=test-bucket" >> .env
-        echo "MINIO_SECURE=false" >> .env
         echo "APP_ENV=testing" >> .env
     
     - name: Initialize database
@@ -1341,6 +1360,30 @@ sequenceDiagram
     FastAPI-->>Frontend: Response
     Frontend-->>User: Tampilkan jawaban/analitik
 ```
+
+---
+
+## 🔄 **Development Workflow**
+
+### **Branch Strategy**
+- **`main`**: Production-ready code with stable features
+- **`develop`**: Integration branch for new features and improvements
+- **`feature/*`**: Individual feature development branches
+
+### **Pull Request Process**
+1. **Create feature branch** from `develop`
+2. **Develop and test** your changes locally
+3. **Create Pull Request** to `develop` branch
+4. **CI/CD Pipeline** runs automatically:
+   - ✅ Backend tests (pytest with coverage)
+   - ✅ Frontend tests (vitest with 16/16 passing)
+   - ✅ Security scanning (Trivy + Bandit)
+   - ✅ Code quality analysis (SonarCloud)
+   - ✅ Integration tests (full stack)
+5. **Code review** and approval required
+6. **Merge to develop** after all checks pass
+7. **Deploy to staging** for final testing
+8. **Merge to main** for production deployment
 
 ---
 
