@@ -13,7 +13,6 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 [![Node Version](https://img.shields.io/badge/node-18-green)](https://nodejs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-modern%20web%20framework-teal)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18-blue)](https://reactjs.org)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
 
