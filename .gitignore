@@ -1,4 +1,5 @@
-*.json
+# Configuration files to ignore (but allow package.json, package-lock.json, tsconfig.json, etc.)
+metadata.json
 *.env
 *.pyc
 __pycache__/
