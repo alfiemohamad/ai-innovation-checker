@@ -28,6 +28,11 @@ export default defineConfig({
       }
     },
     include: ['**/*.{test,spec}.{js,ts,tsx}'],
-    exclude: ['node_modules/', 'dist/', '**/*.config.{js,ts}']
+    exclude: [
+      'node_modules/',
+      'dist/',
+      '**/*.config.{js,ts}',
+      '**/node_modules/**/*.{test,spec}.{js,ts,tsx}' // Exclude all node_modules tests
+    ]
   }
 })
