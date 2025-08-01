@@ -25,7 +25,21 @@
    - Name: `SONAR_TOKEN`
    - Value: `[paste token dari langkah 2]`
 
-## 4. Verify Setup
+## 4. Disable Automatic Analysis (PENTING!)
+
+**Error yang sering terjadi**:
+```
+ERROR You are running CI analysis while Automatic Analysis is enabled. 
+Please consider disabling one or the other.
+```
+
+**Solusi**:
+1. **Go to SonarCloud Project**: https://sonarcloud.io/project/overview?id=alfiemohamad_ai-innovation-checker
+2. **Administration → Analysis Method**
+3. **Disable "Automatic Analysis"**
+4. **Enable "CI-based analysis"** 
+
+## 5. Verify Setup
 
 Setelah setup, push commit untuk trigger CI/CD pipeline dan verifikasi:
 
@@ -33,14 +47,27 @@ Setelah setup, push commit untuk trigger CI/CD pipeline dan verifikasi:
 2. **Quality Gate metrics** muncul di SonarCloud dashboard
 3. **Badges di README** menampilkan status real-time
 
-## 5. Expected Results
+## 6. Create Pull Request untuk Test Pipeline
 
-Setelah pipeline selesai:
+```bash
+# Create develop branch (sudah dibuat)
+git checkout develop
+
+# Create PR via GitHub CLI atau web interface
+# URL otomatis: https://github.com/alfiemohamad/ai-innovation-checker/pull/new/develop
+```
+
+**Kunjungi URL untuk membuat PR**: https://github.com/alfiemohamad/ai-innovation-checker/pull/new/develop
+
+## 7. Expected Results
+
+Setelah pipeline selesai pada PR:
 - ✅ Build Status Badge: Green/Red based on CI status
 - ✅ Quality Gate: Pass/Fail based on code quality
-- ✅ Coverage: Percentage dari backend + frontend tests
+- ✅ Coverage: Percentage dari backend + frontend tests (target: >75%)
 - ✅ Code Smells: Jumlah issues yang perlu diperbaiki
 - ✅ Frontend Tests: 16/16 passing
+- ✅ Backend Coverage: Detailed HTML reports
 
 ## Troubleshooting
 
@@ -50,6 +77,13 @@ Setelah pipeline selesai:
 - Tunggu 1-2 menit setelah pipeline selesai untuk badge update
 
 ### SonarCloud analysis gagal:
+- ✅ **Fixed**: Updated to `sonarqube-scan-action@v5.0.0`
+- ✅ **Fixed**: Added `sonar.analysis.mode=publish`
 - Pastikan SONAR_TOKEN ada di GitHub Secrets
+- Pastikan Automatic Analysis disabled di SonarCloud
 - Cek coverage file paths di sonar-project.properties
-- Pastikan exclusions tidak terlalu luas
+
+### "Automatic Analysis" Error:
+1. **Disable Automatic Analysis** di SonarCloud project settings
+2. **Enable CI-based analysis** 
+3. Re-run pipeline
