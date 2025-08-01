@@ -7,7 +7,13 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=coverage)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
 [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=alfiemohamad_ai-innovation-checker&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=alfiemohamad_ai-innovation-checker)
 [![Frontend Tests](https://img.shields.io/badge/frontend%20tests-16%2F16%20passing-brightgreen)](https://github.com/alfiemohamad/ai-innovation-checker/actions)
+[![Backend Coverage](https://img.shields.io/badge/backend%20coverage-pytest--cov-blue)](https://github.com/alfiemohamad/ai-innovation-checker/actions)
 [![codecov](https://codecov.io/github/alfiemohamad/ai-innovation-checker/graph/badge.svg?token=3USHDAY97N)](https://codecov.io/github/alfiemohamad/ai-innovation-checker)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue)](https://python.org)
+[![Node Version](https://img.shields.io/badge/node-18-green)](https://nodejs.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-modern%20web%20framework-teal)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-blue)](https://reactjs.org)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
 
