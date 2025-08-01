@@ -1,6 +1,11 @@
 # Configuration files to ignore (but allow package.json, package-lock.json, tsconfig.json, etc.)
 metadata.json
 *.env
+
+# Google Cloud Service Account Keys (Security sensitive)
+config/key/
+vertex.json
+service-account*.json
 *.pyc
 __pycache__/
 *.ipynb_checkpoints
