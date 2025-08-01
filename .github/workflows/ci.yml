@@ -162,8 +162,14 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: 'app/package-lock.json'
+    
+    - name: Cache npm dependencies
+      uses: actions/cache@v4
+      with:
+        path: ./app/node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('app/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
     
     - name: Install frontend dependencies
       working-directory: ./app
@@ -318,7 +324,6 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        cache-dependency-path: 'app/package-lock.json'
     
     - name: Start MinIO for Integration Tests
       run: |
