@@ -53,8 +53,7 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 
 ## Struktur Folder
 
-- `main.py`            : Entry point FastAPI, hanya untuk inisialisasi dan register router
-- `routes/`            : Modular endpoint FastAPI (`innovation.py`, `chat.py`, `user.py`)
+- `main.py`            : Entry point FastAPI, seluruh endpoint dan logic backend masih di sini (belum modular)
 - `config/`            : Konfigurasi MinIO, Gemini, PostgreSQL
 - `module/`            : Modul AI, vektor, ekstraksi PDF
 - `app/`               : Frontend React (Vite)
@@ -68,31 +67,261 @@ AI Innovation Checker adalah platform web modern untuk mengelola, menilai, dan m
 
 ---
 
-## API Endpoint Utama
+## API Endpoint Utama & Contoh Penggunaan
 
-Endpoint sudah dipisah modular:
-- `routes/innovation.py` : Upload, scoring, summary, LSA, daftar inovasi
-- `routes/chat.py`       : Chat inovasi, riwayat chat, analitik, pencarian chat
-- `routes/user.py`       : Register & login user
+### 1. Upload Inovasi
+**POST** `/innovations/`
 
-Referensi endpoint tetap sama seperti sebelumnya, hanya struktur backend lebih modular dan maintainable.
+Contoh cURL:
+```bash
+curl -X 'POST' \
+  'http://localhost:8000/innovations/' \
+  -H 'accept: application/json' \
+  -H 'X-Inovator: user tester' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'judul_inovasi=Sistem "Nusantara Eco-Hub": Solusi Cerdas Pengelolaan Sampah Perkotaan Berbasis IoT, AI, dan Gamifikasi' \
+  -F 'file=@Sistem _Nusantara Eco-Hub__ Solusi Cerdas Pengelolaan Sampah Perkotaan Berbasis IoT, AI, dan Gamifikasi.pdf;type=application/pdf' \
+  -F 'table_name=innovations'
+```
+Contoh Response:
+```json
+{
+  "status": "success",
+  "code": 200,
+  "table": "innovations",
+  "extracted_sections": {
+    "latar_belakang": "✓",
+    "tujuan_inovasi": "✗",
+    "deskripsi_inovasi": "✓"
+  },
+  "ai_summary": {
+    "ringkasan_singkat": "Sistem ...",
+    "masalah_yang_diatasi": "Krisis ...",
+    "solusi_yang_ditawarkan": "Implementasi ...",
+    "potensi_manfaat": "Peningkatan ...",
+    "keunikan_inovasi": "Integrasi ..."
+  },
+  "innovation_id": "sistem_..._user_tester"
+}
+```
+
+### 2. Penilaian Inovasi
+**POST** `/get_score`
+
+Contoh cURL:
+```bash
+curl -X 'POST' \
+  'http://localhost:8000/get_score' \
+  -H 'accept: application/json' \
+  -H 'X-Inovator: user tester' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'id=773e4160-2961-4f29-8702-7bbf5d1f7765&table_name=innovations'
+```
+Contoh Response:
+```json
+{
+  "innovation_id": "773e4160-2961-4f29-8702-7bbf5d1f7765",
+  "nama_inovasi": "sistem_...",
+  "nama_inovator": "user_tester",
+  "link_document": "http://localhost:9000/ai-innovation/innovations/773e4160-2961-4f29-8702-7bbf5d1f7765.pdf",
+  "component_scores": {
+    "substansi_orisinalitas": 13,
+    "substansi_urgensi": 9,
+    "substansi_kedalaman": 12,
+    "analisis_dampak": 13,
+    "analisis_kelayakan": 8,
+    "analisis_data": 7,
+    "sistematika_struktur": 9,
+    "sistematika_bahasa": 9,
+    "sistematika_referensi": 3
+  },
+  "total_score": 83,
+  "plagiarism_check": [
+    {
+      "similarity_score": 1,
+      "nama_inovasi": "sistem_...",
+      "nama_inovator": "user_tester",
+      "compared_innovation_description": "Sistem ..."
+    }
+  ]
+}
+```
+
+### 3. LSA Similarity
+**GET** `/innovations/{id}/lsa_results`
+
+Contoh cURL:
+```bash
+curl -X 'GET' \
+  'http://localhost:8000/innovations/773e4160-2961-4f29-8702-7bbf5d1f7765/lsa_results?table_name=innovations' \
+  -H 'accept: application/json'
+```
+Contoh Response:
+```json
+{
+  "innovation_id": "773e4160-2961-4f29-8702-7bbf5d1f7765",
+  "total_similar_documents": 1,
+  "lsa_results": [
+    {
+      "compared_innovation_id": "sistem_...",
+      "similarity_score": 1,
+      "compared_innovation_description": "Sistem ...",
+      "nama_inovator": "user_tester",
+      "created_at": "2025-08-01T11:06:36.258387"
+    }
+  ]
+}
+```
+
+### 4. Ringkasan AI
+**GET** `/innovations/{id}/summary`
+
+Contoh cURL:
+```bash
+curl -X 'GET' \
+  'http://localhost:8000/innovations/sistem_%22nusantara_eco-hub%22%3A_solusi_cerdas_pengelolaan_sampah_perkotaan_berbasis_iot%2C_ai%2C_dan_gamifikasi_user_tester/summary?table_name=innovations' \
+  -H 'accept: application/json'
+```
+Contoh Response:
+```json
+{
+  "innovation_id": "sistem_..._user_tester",
+  "nama_inovasi": "sistem_...",
+  "nama_inovator": "user_tester",
+  "link_document": "http://localhost:9000/ai-innovation/innovations/sistem_..._user_tester.pdf",
+  "ai_summary": {
+    "ringkasan_singkat": "Sistem ...",
+    "masalah_yang_diatasi": "Krisis ...",
+    "solusi_yang_ditawarkan": "Sistem ...",
+    "potensi_manfaat": "Peningkatan ...",
+    "keunikan_inovasi": "Integrasi ..."
+  }
+}
+```
+
+### 5. Chat Inovasi
+**POST** `/innovations/{id}/chat`
+
+Contoh cURL:
+```bash
+curl -X 'POST' \
+  'http://localhost:8000/innovations/sistem_%22nusantara_eco-hub%22%3A_solusi_cerdas_pengelolaan_sampah_perkotaan_berbasis_iot%2C_ai%2C_dan_gamifikasi_user_tester/chat' \
+  -H 'accept: application/json' \
+  -H 'X-Inovator: user_tester' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'question=pakah%20ada%20saran%20perbaikan%20yg%20bisa%20dikembangkan%20dari%20inovasi%20saya&table_name=innovations'
+```
+Contoh Response:
+```json
+{
+  "chat_id": "cf46f82c-eef1-495c-8af9-eead26e4923d",
+  "innovation_id": "sistem_..._user_tester",
+  "question": "pakah ada saran perbaikan yg bisa dikembangkan dari inovasi saya",
+  "answer": "Tentu, berikut adalah beberapa saran ...",
+  "timestamp": "2025-08-01T09:45:37.922913",
+  "innovation_name": "sistem_..."
+}
+```
+
+### 6. Ranking Inovasi
+**GET** `/get_rank?table_name=innovations`
+
+Contoh cURL:
+```bash
+curl -X 'GET' \
+  'http://localhost:8000/get_rank?table_name=innovations' \
+  -H 'accept: application/json'
+```
+Contoh Response:
+```json
+{
+  "ranking": [
+    {
+      "innovation_id": "sistem_\"nusantara_eco-hub\":_solusi_cerdas_pengelolaan_sampah_perkotaan_berbasis_iot,_ai,_dan_gamifikasi_user_tester",
+      "substansi_orisinalitas": 13,
+      "substansi_urgensi": 9,
+      "substansi_kedalaman": 14,
+      "analisis_dampak": 13,
+      "analisis_kelayakan": 8,
+      "analisis_data": 7,
+      "sistematika_struktur": 9,
+      "sistematika_bahasa": 9,
+      "sistematika_referensi": 4,
+      "total_score": 86,
+      "created_at": "2025-08-01T10:02:12.921681"
+    },
+    // ...
+  ],
+  "total": 7
+}
+```
+
+### 7. Pencarian Inovasi Serupa
+**POST** `/search_inovasi`
+
+Contoh cURL:
+```bash
+curl -X 'POST' \
+  'http://localhost:8000/search_inovasi' \
+  -H 'accept: application/json' \
+  -H 'X-Inovator: user test' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'query=saya%20ingin%20mengetahui%20apakah%20ada%20inovasi%20yg%20memanfaatkan%20iot&table_name=innovations'
+```
+Contoh Response:
+```json
+{
+  "query": "saya ingin mengetahui apakah ada inovasi yg memanfaatkan iot",
+  "top_innovation": {
+    "id": "fe361b37-138a-499a-bfe4-5bcb79f8ae75",
+    "nama_inovasi": "pemanfaatan_kecerdasan_buatan_dan_internet_of_things_untuk_pertanian_presisi_berkelanjutan_di_indonesia",
+    "nama_inovator": "ryza",
+    "latar_belakang": "Sebagai negara agraris, Indonesia ...",
+    "tujuan_inovasi": "Tujuan dari penulisan makalah ini adalah ...",
+    "deskripsi_inovasi": "Agri-Synth adalah sebuah ekosistem teknologi ...",
+    "link_document": "http://localhost:9000/ai-innovation/innovations/fe361b37-138a-499a-bfe4-5bcb79f8ae75.pdf",
+    "similarity": 0.7259951526999864
+  },
+  "ai_explanation": "Bayangkan sebuah sistem pintar untuk membantu petani ...",
+  "results": [ /* ...list hasil similarity... */ ]
+}
+```
 
 ---
 
-## Konfigurasi Lingkungan (`.env`)
-Lihat file `.env` untuk contoh variabel yang diperlukan (MinIO, Gemini, PostgreSQL, skor, dsb).
+### Diagram Alur Proses (Mermaid)
 
----
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant FastAPI
+    participant MinIO
+    participant PostgreSQL
+    participant GeminiAI
 
-## Catatan
-- Semua endpoint backend sudah mendukung CORS dan debug logging.
-- Frontend sudah mendukung upload, list, detail, scoring, chat, analytics, floating chatbot, dan notifikasi.
-- Untuk pengembangan/production, pastikan variabel `.env` sudah diatur dan MinIO/PostgreSQL sudah berjalan.
+    User->>Frontend: Upload PDF & data inovasi
+    Frontend->>FastAPI: POST /innovations/ (PDF, judul, header)
+    FastAPI->>MinIO: Simpan file PDF
+    FastAPI->>GeminiAI: Ekstrak & ringkas PDF
+    FastAPI->>PostgreSQL: Simpan metadata & hasil ekstraksi
+    FastAPI-->>Frontend: Response (innovation_id, summary, etc)
+    Frontend-->>User: Tampilkan hasil upload
 
----
+    User->>Frontend: Request penilaian inovasi
+    Frontend->>FastAPI: POST /get_score
+    FastAPI->>PostgreSQL: Ambil metadata & file
+    FastAPI->>GeminiAI: Skoring otomatis
+    FastAPI->>PostgreSQL: Simpan hasil scoring & similarity
+    FastAPI-->>Frontend: Response skor & similarity
+    Frontend-->>User: Tampilkan skor & plagiarisme
 
-## Kontributor
-- Mohamad Alfie
+    User->>Frontend: Chat/summary/analytics request
+    Frontend->>FastAPI: Request endpoint terkait
+    FastAPI->>PostgreSQL: Query data/chat/analytics
+    FastAPI-->>Frontend: Response
+    Frontend-->>User: Tampilkan jawaban/analitik
+```
 
 ---
 

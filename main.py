@@ -415,6 +415,54 @@ async def get_score(
 
 
 
+@app.get("/get_rank")
+async def get_rank(table_name: str = "innovations"):
+    """
+    Endpoint untuk mendapatkan ranking inovasi berdasarkan total_score.
+    Data diambil dari table scoring (misal: innovations_scoring), diurutkan dari skor tertinggi.
+    """
+    try:
+        conn = await db.connect_to_db()
+        rows = await conn.fetch(
+            f"""
+            SELECT  innovation_id,
+                    substansi_orisinalitas, 
+                    substansi_urgensi, 
+                    substansi_kedalaman, 
+                    analisis_dampak, 
+                    analisis_kelayakan, 
+                    analisis_data, 
+                    sistematika_struktur, 
+                    sistematika_bahasa, 
+                    sistematika_referensi, 
+                    total_score, 
+                    created_at
+            FROM public.{table_name}_scoring
+            ORDER BY total_score DESC
+            """
+        )
+        await conn.close()
+        ranking = [
+            {
+                "innovation_id": r["innovation_id"],
+                "substansi_orisinalitas": r["substansi_orisinalitas"],
+                "substansi_urgensi": r["substansi_urgensi"],
+                "substansi_kedalaman": r["substansi_kedalaman"],
+                "analisis_dampak": r["analisis_dampak"],
+                "analisis_kelayakan": r["analisis_kelayakan"],
+                "analisis_data": r["analisis_data"],
+                "sistematika_struktur": r["sistematika_struktur"],
+                "sistematika_bahasa": r["sistematika_bahasa"],
+                "sistematika_referensi": r["sistematika_referensi"],
+                "total_score": r["total_score"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None
+            }
+            for r in rows
+        ]
+        return JSONResponse({"ranking": ranking, "total": len(ranking)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get("/innovations/{innovation_id}/lsa_results")
 async def get_innovation_lsa_results(
     innovation_id: str,
@@ -425,6 +473,7 @@ async def get_innovation_lsa_results(
     """
     try:
         lsa_results = await db.get_lsa_results(innovation_id, table_name)
+        print(f"LSA results for {innovation_id}: {lsa_results}")
         
         if not lsa_results:
             return JSONResponse({
@@ -910,3 +959,50 @@ async def login_user(username: str = Form(...), password: str = Form(...)):
     if not pwd_context.verify(password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
     return {"status": "success", "message": "Login successful"}
+
+@app.post("/search_inovasi")
+async def search_inovasi(
+    query: str = Form(...),
+    table_name: str = Form("innovations"),
+    x_inovator: str = Header(..., alias="X-Inovator")
+):
+    """
+    Endpoint untuk mencari inovasi serupa berdasarkan query (judul, ide, atau deskripsi).
+    Menggunakan similarity_search_plagiarisme untuk pencarian berbasis vektor.
+    Juga menghasilkan penjelasan AI (agent) secara umum tentang ide inovasi hasil teratas.
+    """
+    try:
+        # Cari inovasi serupa
+        results = await db.similarity_search_plagiarisme(query, 0.5, 5, table_name)
+        if isinstance(results, dict) and "message" in results:
+            return JSONResponse({"message": results["message"], "results": []})
+        if not results:
+            return JSONResponse({"message": "Tidak ada inovasi serupa ditemukan", "results": []})
+        # Ambil deskripsi inovasi teratas
+        top = results[0]
+        deskripsi = top.get("deskripsi_inovasi") or ""
+        judul = top.get("nama_inovasi") or ""
+        # Buat prompt agent penjelas ide inovasi
+        agent_prompt = f"""
+        Anda adalah asisten AI yang bertugas menjelaskan ide inovasi berikut secara ringkas, jelas, dan mudah dipahami oleh masyarakat umum.
+        Judul: {judul}
+        Deskripsi: {deskripsi}
+        Jelaskan secara umum apa inti ide inovasi ini, manfaat utamanya, dan mengapa penting.
+        """
+        # Gunakan model AI untuk membuat penjelasan
+        ai_explanation = None
+        try:
+            ai_result = db.extractor.model.generate_content([agent_prompt])
+            if ai_result and ai_result.text:
+                ai_explanation = ai_result.text.strip()
+        except Exception as e:
+            ai_explanation = f"Gagal membuat penjelasan AI: {e}"
+        return JSONResponse({
+            "query": query,
+            "top_innovation": top,
+            "ai_explanation": ai_explanation,
+            "results": results
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+

@@ -135,14 +135,15 @@ class PostgreDB:
             CREATE TABLE IF NOT EXISTS {table_name}_lsa_results (
                 id SERIAL PRIMARY KEY,
                 innovation_id VARCHAR(1024) NOT NULL REFERENCES {table_name}(id),
-                compared_innovation_id VARCHAR(1024),
+                compared_innovation VARCHAR(1024),
                 similarity_score FLOAT,
-                link_document TEXT,
+                compared_innovation_description TEXT,
                 nama_inovator TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         await conn.close()
+
 
     async def save_lsa_results(self, innovation_id: str, lsa_results: list, table_name: str = "innovations"):
         """Save LSA similarity results to database"""
@@ -162,12 +163,12 @@ class PostgreDB:
             for result in lsa_results:
                 await conn.execute(
                     f"""INSERT INTO {table_name}_lsa_results 
-                        (innovation_id, compared_innovation_id, similarity_score, link_document, nama_inovator)
+                        (innovation_id, compared_innovation, similarity_score, compared_innovation_description, nama_inovator)
                         VALUES ($1, $2, $3, $4, $5)""",
                     innovation_id,
-                    result.get("compared_innovation_id"),
+                    result.get("nama_inovasi"),
                     result.get("similarity_score"),
-                    result.get("link_document"),
+                    result.get("compared_innovation_description"),
                     result.get("nama_inovator")
                 )
             
@@ -591,32 +592,40 @@ class PostgreDB:
         except Exception as e:
             print(f"Failed to search chat history: {e}")
             return []
-
+        
     async def get_lsa_results(self, innovation_id: str, table_name: str = "innovations"):
         """Get LSA similarity results for an innovation"""
         try:
             conn = await self.connect_to_db()
-            results = await conn.fetch(
-                f"""SELECT compared_innovation_id, similarity_score, link_document, nama_inovator, created_at
-                    FROM {table_name}_lsa_results 
-                    WHERE innovation_id = $1 
+            rows = await conn.fetch(
+                f"""SELECT 
+                        compared_innovation,
+                        similarity_score,
+                        compared_innovation_description,
+                        nama_inovator,
+                        created_at
+                    FROM {table_name}_lsa_results
+                    WHERE innovation_id = $1
                     ORDER BY similarity_score DESC""",
                 innovation_id
             )
             await conn.close()
-            
+
             return [
                 {
-                    "compared_innovation_id": r["compared_innovation_id"],
+                    "compared_innovation_id": r["compared_innovation"],
                     "similarity_score": r["similarity_score"],
-                    "link_document": r["link_document"],
+                    "compared_innovation_description": r["compared_innovation_description"],
                     "nama_inovator": r["nama_inovator"],
                     "created_at": r["created_at"].isoformat() if r["created_at"] else None
-                } for r in results
+                }
+                for r in rows
             ]
         except Exception as e:
-            print(f"Failed to get LSA results: {e}")
+            print(f"Failed to fetch LSA results: {e}")
             return []
+
+
 
     async def similarity_search_plagiarisme(
         self,
