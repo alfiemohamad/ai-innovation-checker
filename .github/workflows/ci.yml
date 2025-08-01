@@ -45,7 +45,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Shallow clones should be disabled for better analysis
+        fetch-depth: 0
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -137,7 +137,7 @@ jobs:
         fail_ci_if_error: false
     
     - name: Archive backend test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       if: always()
       with:
         name: backend-test-results
@@ -167,9 +167,7 @@ jobs:
     - name: Run frontend linting
       working-directory: ./app
       run: |
-        # Install ESLint if not already in package.json
         npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
-        # Create basic ESLint config if it doesn't exist
         if [ ! -f .eslintrc.js ]; then
           echo "module.exports = {
             parser: '@typescript-eslint/parser',
@@ -190,10 +188,8 @@ jobs:
     - name: Run frontend tests
       working-directory: ./app
       run: |
-        # Install Vitest and testing utilities if not already installed
         npm install --save-dev vitest @vitest/ui jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
         
-        # Create vitest config if it doesn't exist
         if [ ! -f vitest.config.ts ]; then
           cat > vitest.config.ts << 'EOF'
         import { defineConfig } from 'vitest/config'
@@ -221,17 +217,14 @@ jobs:
         EOF
         fi
         
-        # Create setup file if it doesn't exist
         if [ ! -f setupTests.ts ]; then
           echo "import '@testing-library/jest-dom'" > setupTests.ts
         fi
         
-        # Update package.json with test scripts if they don't exist
         npm pkg set scripts.test="vitest"
         npm pkg set scripts.test:coverage="vitest --coverage"
         npm pkg set scripts.test:ui="vitest --ui"
         
-        # Run tests
         npm run test:coverage
     
     - name: Upload frontend coverage
@@ -247,7 +240,7 @@ jobs:
       run: npm run build
     
     - name: Archive frontend artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       if: always()
       with:
         name: frontend-build
@@ -280,13 +273,11 @@ jobs:
     - name: Python Security Check
       run: |
         pip install safety bandit
-        # Check for known security vulnerabilities
         safety check --json || true
-        # Run bandit for security issues in code
         bandit -r . -f json -o bandit-report.json || true
     
     - name: Upload security scan results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       if: always()
       with:
         name: security-scan-results
@@ -303,15 +294,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Shallow clones should be disabled for SonarCloud analysis
+        fetch-depth: 0
     
     - name: Download backend coverage
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4  # Updated to v4
       with:
         name: backend-test-results
     
     - name: Download frontend coverage
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4  # Updated to v4
       with:
         name: frontend-build
         path: app/
@@ -384,27 +375,19 @@ jobs:
     
     - name: Run integration tests
       run: |
-        # Start backend in background
         uvicorn main:app --host 0.0.0.0 --port 8000 &
         BACKEND_PID=$!
         
-        # Start frontend in background  
         cd app && npm run dev -- --host 0.0.0.0 --port 3000 &
         FRONTEND_PID=$!
         
-        # Wait for services to start
         sleep 30
         
-        # Test backend health
         curl -f http://localhost:8000/health || echo "Backend health check failed"
-        
-        # Test frontend
         curl -f http://localhost:3000 || echo "Frontend health check failed"
         
-        # Run integration tests
         cd .. && pytest tests/ -m integration -v || true
         
-        # Cleanup
         kill $BACKEND_PID $FRONTEND_PID || true
 
   deploy:
@@ -419,19 +402,15 @@ jobs:
     - name: Deploy to staging
       run: |
         echo "🚀 Deploying to staging environment..."
-        # Add your deployment scripts here
-        # Example: deploy to cloud provider, update containers, etc.
     
     - name: Run smoke tests
       run: |
         echo "🧪 Running smoke tests on staging..."
-        # Add smoke tests for deployed application
     
     - name: Deploy to production
       if: success()
       run: |
         echo "🎉 Deploying to production environment..."
-        # Add production deployment scripts here
 
   cleanup:
     runs-on: ubuntu-latest
@@ -442,4 +421,3 @@ jobs:
     - name: Cleanup artifacts
       run: |
         echo "🧹 Cleaning up temporary artifacts..."
-        # Add cleanup tasks if needed
